@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Trading app light theme custom properties */
+@theme {
+	--color-surface-primary: #f6f8fc;
+	--color-surface-secondary: #ffffff;
+	--color-surface-tertiary: #eff3f9;
+	--color-surface-hover: #e6edf8;
+	--color-border-primary: #cfd8e6;
+	--color-border-secondary: #dde4ef;
+	--color-long: #0f9f57;
+	--color-long-dim: #0f9f571a;
+	--color-short: #e23a45;
+	--color-short-dim: #e23a451a;
+	--color-accent: #0a7cff;
+	--color-accent-dim: #0a7cff1a;
+}
+
+/* Prevent overscroll bounce on mobile */
+html, body {
+	overscroll-behavior: none;
+	-webkit-tap-highlight-color: transparent;
+	font-family: "SF Pro Text", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Safe area insets for notched devices */
+body {
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
+	background:
+		radial-gradient(1200px 380px at 10% -8%, #dbeafe 0%, transparent 62%),
+		radial-gradient(1100px 420px at 100% -14%, #dcfce7 0%, transparent 56%),
+		var(--color-surface-primary);
+	color: #0f172a;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 4px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--color-border-primary);
+	border-radius: 2px;
+}
+
+/* Subtle card elevation for surfaces used throughout the app */
+.bg-surface-secondary {
+	box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03), 0 4px 14px rgba(15, 23, 42, 0.03);
+}
