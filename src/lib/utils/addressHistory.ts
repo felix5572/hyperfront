@@ -22,3 +22,10 @@ export function pushAddressHistory(address: string): void {
 	list = [trimmed, ...list.filter((a) => a.toLowerCase() !== trimmed.toLowerCase())].slice(0, MAX_ENTRIES);
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
+
+export function removeAddressHistory(address: string): void {
+	if (typeof localStorage === 'undefined') return;
+	const trimmed = address.trim().toLowerCase();
+	const list = getAddressHistory().filter((a) => a.toLowerCase() !== trimmed);
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}

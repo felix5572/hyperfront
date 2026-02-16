@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { walletStore } from '$stores/wallet.svelte';
-	import { getAddressHistory, pushAddressHistory } from '$utils/addressHistory';
+	import { getAddressHistory, pushAddressHistory, removeAddressHistory } from '$utils/addressHistory';
 	import { truncateAddress } from '$utils/format';
 
 	interface Props {
@@ -53,6 +53,11 @@
 	function pickRecent(addr: string) {
 		submitAddress(addr);
 	}
+
+	function deleteRecent(addr: string) {
+		removeAddressHistory(addr);
+		recentAddresses = getAddressHistory();
+	}
 </script>
 
 <div class="p-4 space-y-3">
@@ -81,13 +86,24 @@
 		<div class="flex flex-wrap items-center gap-1.5">
 			<span class="text-[10px] text-gray-500 uppercase tracking-wide shrink-0">Recent</span>
 			{#each recentAddresses as addr (addr)}
-				<button
-					type="button"
-					class="px-2 py-1 text-[11px] font-mono rounded bg-surface-tertiary border border-border-secondary text-gray-600 hover:border-accent hover:text-accent transition-colors"
-					onclick={() => pickRecent(addr)}
-				>
-					{truncateAddress(addr)}
-				</button>
+				<div class="relative">
+					<button
+						type="button"
+						class="px-2 py-1 pr-5 text-[11px] font-mono rounded bg-surface-tertiary border border-border-secondary text-gray-600 hover:border-accent hover:text-accent transition-colors"
+						onclick={() => pickRecent(addr)}
+					>
+						{truncateAddress(addr)}
+					</button>
+					<button
+						type="button"
+						aria-label="Remove recent address"
+						class="absolute -top-1 -right-1 w-4 h-4 rounded-full border border-border-secondary bg-surface-secondary text-[10px] leading-none text-gray-500 hover:text-short hover:border-short/40"
+						onclick={(e) => {
+							e.stopPropagation();
+							deleteRecent(addr);
+						}}
+					>×</button>
+				</div>
 			{/each}
 		</div>
 	{/if}
