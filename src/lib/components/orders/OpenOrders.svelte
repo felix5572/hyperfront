@@ -217,31 +217,31 @@
 				<span class="{isBuy ? 'text-long' : 'text-short'} font-medium text-center py-1.5 border-b border-border-secondary hover:bg-surface-hover">
 					<span class="h-10 flex flex-col items-center justify-center leading-tight">
 						<span>{isBuy ? 'BUY' : 'SELL'}</span>
-						<span class="text-[10px] text-gray-500">{order.reduceOnly ? 'RO' : 'NR'}</span>
+						<span class="text-[10px] text-gray-500">&nbsp;</span>
 					</span>
 				</span>
 				<span class="text-right tabular-nums font-semibold font-mono tracking-tight text-gray-900 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
 					<span class="h-10 flex flex-col justify-center leading-tight">
 						<span>${formatPrice(order.limitPx, pp.szDecimals, pp.isSpot)}</span>
-						<span class="text-[10px] text-gray-500 font-normal">Limit</span>
+						<span class="text-[10px] text-gray-500 font-normal">&nbsp;</span>
 					</span>
 				</span>
 				<span class="text-right tabular-nums font-mono py-1.5 border-b border-border-secondary hover:bg-surface-hover">
 					<span class="h-10 flex flex-col justify-center leading-tight">
 						<span>{formatSize(order.sz, pp.szDecimals)}</span>
-						<span class="text-[10px] text-gray-500">{displayName}</span>
+						<span class="text-[10px] text-gray-500">&nbsp;</span>
 					</span>
 				</span>
 				<span class="text-right tabular-nums font-semibold font-mono tracking-tight text-gray-900 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
 					<span class="h-10 flex flex-col justify-center leading-tight">
 						<span>{formatUsd(orderValue)}</span>
-						<span class="text-[10px] text-gray-500 font-normal">Notional</span>
+						<span class="text-[10px] text-gray-500 font-normal">&nbsp;</span>
 					</span>
 				</span>
 				<span class="text-right tabular-nums text-gray-500 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
 					<span class="h-10 flex flex-col justify-center leading-tight">
 						<span>{formatTime(order.timestamp)}</span>
-						<span class="text-[10px] text-gray-400">OID {order.oid}</span>
+						<span class="text-[10px] text-gray-400">&nbsp;</span>
 					</span>
 				</span>
 				<span class="py-1.5 border-b border-border-secondary text-right">
