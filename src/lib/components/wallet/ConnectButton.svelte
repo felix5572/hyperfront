@@ -4,6 +4,8 @@
 	import { truncateAddress } from '$utils/format';
 	import { onMount } from 'svelte';
 
+	let { variant = 'default' }: { variant?: 'default' | 'large' } = $props();
+
 	let showMenu = $state(false);
 	let showWalletPicker = $state(false);
 	let connecting = $state(false);
@@ -83,20 +85,22 @@
 		{/if}
 	</div>
 {:else}
-	<div class="relative">
+	<div class="relative {variant === 'large' ? 'w-full' : ''}">
 		<button
-			class="px-3 py-1.5 text-xs font-medium bg-accent/20 text-accent rounded-lg border border-accent/30 hover:bg-accent/30 transition-colors disabled:opacity-50"
+			class={variant === 'large'
+				? 'w-full min-h-[48px] py-4 text-base font-semibold bg-accent text-white rounded-xl border-2 border-accent shadow-md hover:bg-accent/90 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-50'
+				: 'px-3 py-1.5 text-xs font-medium bg-accent/20 text-accent rounded-lg border border-accent/30 hover:bg-accent/30 transition-colors disabled:opacity-50'}
 			onclick={handleConnectClick}
 			disabled={connecting || walletStore.status === 'connecting'}
 		>
-			{connecting || walletStore.status === 'connecting' ? 'Connecting...' : 'Connect'}
+			{connecting || walletStore.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
 		</button>
 
 		{#if showWalletPicker}
 			<!-- backdrop -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="fixed inset-0 z-40" onclick={closePicker} onkeydown={() => {}}></div>
-			<div class="absolute right-0 top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl p-1 min-w-[200px]">
+			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl p-1 min-w-[200px]">
 				{#if hasInjected}
 					<button
 						class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover rounded transition-colors"
@@ -115,7 +119,7 @@
 		{/if}
 
 		{#if connectError}
-			<div class="absolute right-0 top-full mt-1 z-50 w-64 p-2 rounded-lg border border-red-300 bg-red-50 text-red-700 text-[11px] leading-snug shadow-lg">
+			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 w-64 p-2 rounded-lg border border-red-300 bg-red-50 text-red-700 text-[11px] leading-snug shadow-lg">
 				<p>{connectError}</p>
 				{#if isMobile && !hasInjected}
 					<p class="mt-1">Tip: use WalletConnect to connect your mobile wallet.</p>

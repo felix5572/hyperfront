@@ -2,6 +2,7 @@
 	import { walletStore } from '$stores/wallet.svelte';
 	import { getAddressHistory, pushAddressHistory, removeAddressHistory } from '$utils/addressHistory';
 	import { truncateAddress } from '$utils/format';
+	import ConnectButton from '$components/wallet/ConnectButton.svelte';
 
 	interface Props {
 		onView: (addr: `0x${string}`) => void;
@@ -109,12 +110,6 @@
 	{/if}
 
 	{#if showConnectWallet && !walletStore.isConnected}
-		<button
-			class="w-full min-h-[48px] py-4 text-base font-semibold bg-accent text-white rounded-xl border-2 border-accent shadow-md hover:bg-accent/90 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:bg-accent disabled:shadow-md"
-			onclick={() => walletStore.connect()}
-			disabled={walletStore.status === 'connecting'}
-		>
-			{walletStore.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
-		</button>
+		<ConnectButton variant="large" />
 	{/if}
 </div>

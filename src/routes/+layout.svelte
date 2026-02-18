@@ -2,6 +2,7 @@
 	import '../app.css';
 	import Header from '$components/layout/Header.svelte';
 	import BottomNav from '$components/layout/BottomNav.svelte';
+	import WalletDisclaimer from '$components/wallet/WalletDisclaimer.svelte';
 
 	let { children } = $props();
 </script>
@@ -17,3 +18,5 @@
 	</main>
 	<BottomNav />
 </div>
+
+<WalletDisclaimer />
