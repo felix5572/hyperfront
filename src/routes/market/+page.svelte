@@ -211,7 +211,7 @@
 			{#each marketStore.filteredHip3Assets as asset (asset.meta.name)}
 				<CoinCard
 					coin={asset.meta.name}
-					pairSuffix={` - ${marketStore.hip3Quote}`}
+					pairSuffix={` - ${asset.quoteCurrency ?? marketStore.hip3Quote}`}
 					idLabel={`Asset ID: ${asset.assetId}`}
 					idLabelOnNewLine={true}
 					maxLeverage={asset.meta.maxLeverage}

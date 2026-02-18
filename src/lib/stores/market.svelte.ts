@@ -32,6 +32,7 @@ export interface PerpAsset {
 	meta: AssetMeta;
 	ctx: AssetCtx;
 	assetId: number;
+	quoteCurrency?: string; // HIP-3 only: each DEX may use a different collateral token
 }
 
 // --- Spot types ---
@@ -221,7 +222,8 @@ const hip3Assets = $derived<PerpAsset[]>(
 		.map((meta, i) => ({
 			meta,
 			ctx: hip3Ctxs[i] ?? {} as AssetCtx,
-			assetId: 100000 + activeHip3DexIndex * 10000 + i
+			assetId: 100000 + activeHip3DexIndex * 10000 + i,
+			quoteCurrency: hip3Quote
 		}))
 		.filter((a) => !a.meta.isDelisted)
 		.sort(byVolume)
@@ -338,12 +340,14 @@ async function fetchAllHip3(force = false) {
 		const metas: AssetMeta[] = meta?.universe ?? [];
 		const contexts: AssetCtx[] = ctxs ?? [];
 		const dexIndex = hip3Dexes[idx].perpDexIndex;
+		const quoteCurrency = getQuoteCurrency(meta?.collateralToken ?? 0);
 		metas.forEach((m, i) => {
 			if (!m.isDelisted) {
 				merged.push({
 					meta: m,
 					ctx: contexts[i] ?? {} as AssetCtx,
-					assetId: 100000 + dexIndex * 10000 + i
+					assetId: 100000 + dexIndex * 10000 + i,
+					quoteCurrency
 				});
 			}
 		});
