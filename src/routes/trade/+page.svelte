@@ -49,6 +49,12 @@
 		activeStakingDiscount?: { discount?: string; bpsOfMaxSupply?: string } | null;
 		dailyUserVlm?: Array<{ date: string; exchange: string }>;
 	};
+	type UserRateLimitInfo = {
+		cumVlm?: string;
+		nRequestsUsed?: number;
+		nRequestsCap?: number;
+		nRequestsSurplus?: number;
+	};
 
 	type BeforeInstallPromptEvent = Event & {
 		prompt: () => Promise<void>;
@@ -68,11 +74,13 @@
 	let subAccounts = $state<SubAccountItem[]>([]);
 	let referral = $state<ReferralInfo | null>(null);
 	let userFees = $state<UserFeesInfo | null>(null);
+	let userRateLimit = $state<UserRateLimitInfo | null>(null);
 	let abstraction = $state<string | null>(null);
 
 	let rawSubAccounts = $state<unknown>(null);
 	let rawReferral = $state<unknown>(null);
 	let rawUserFees = $state<unknown>(null);
+	let rawUserRateLimit = $state<unknown>(null);
 	let rawAbstraction = $state<unknown>(null);
 
 	async function fetchUserAbstraction(user: `0x${string}`): Promise<string | null> {
@@ -96,22 +104,39 @@
 		}
 	}
 
+	async function fetchUserRateLimit(user: `0x${string}`): Promise<UserRateLimitInfo | null> {
+		const res = await fetch(INFO_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				type: 'userRateLimit',
+				user
+			})
+		});
+		if (!res.ok) throw new Error(`userRateLimit failed: ${res.status} ${res.statusText}`);
+		const parsed = await res.json();
+		rawUserRateLimit = parsed;
+		return (parsed as UserRateLimitInfo) ?? null;
+	}
+
 	async function loadInfo(user: `0x${string}`) {
 		viewAddress = user;
 		loading = true;
 		loadError = null;
 		try {
-			const [sub, ref, fees, abs] = await Promise.all([
+			const [sub, ref, fees, abs, rateLimit] = await Promise.all([
 				infoClient.subAccounts({ user }),
 				infoClient.referral({ user }),
 				infoClient.userFees({ user }),
-				fetchUserAbstraction(user)
+				fetchUserAbstraction(user),
+				fetchUserRateLimit(user)
 			]);
 
 			subAccounts = (sub as unknown as SubAccountItem[]) ?? [];
 			referral = (ref as unknown as ReferralInfo) ?? null;
 			userFees = (fees as unknown as UserFeesInfo) ?? null;
 			abstraction = abs;
+			userRateLimit = rateLimit;
 
 			rawSubAccounts = sub;
 			rawReferral = ref;
@@ -358,6 +383,28 @@
 			</div>
 
 			<div class="p-3 rounded-lg border border-border-secondary bg-surface-secondary">
+				<h3 class="text-xs font-semibold mb-2">API Rate Limit</h3>
+				<div class="grid grid-cols-2 gap-2 text-[11px]">
+					<div>Used: <span class="font-mono tabular-nums">{userRateLimit?.nRequestsUsed ?? 0}</span></div>
+					<div>Cap: <span class="font-mono tabular-nums">{userRateLimit?.nRequestsCap ?? 0}</span></div>
+					<div>Surplus: <span class="font-mono tabular-nums">{userRateLimit?.nRequestsSurplus ?? 0}</span></div>
+					<div>
+						Usage:
+						<span class="font-mono tabular-nums">
+							{#if (userRateLimit?.nRequestsCap ?? 0) > 0}
+								{(((userRateLimit?.nRequestsUsed ?? 0) / (userRateLimit?.nRequestsCap ?? 1)) * 100).toFixed(2)}%
+							{:else}
+								0.00%
+							{/if}
+						</span>
+					</div>
+				</div>
+				<p class="mt-2 text-[11px] text-gray-600">
+					Cumulative Volume: {formatUsd(parseFloat(userRateLimit?.cumVlm ?? '0'))}
+				</p>
+			</div>
+
+			<div class="p-3 rounded-lg border border-border-secondary bg-surface-secondary">
 				<h3 class="text-xs font-semibold mb-2">Fees</h3>
 				<div class="grid grid-cols-2 gap-2 text-[11px]">
 					<div>User Cross Rate: <span class="font-mono">{userFees?.userCrossRate ?? 'N/A'}</span></div>
@@ -383,6 +430,10 @@
 					<details>
 						<summary class="text-[11px] cursor-pointer">userFees</summary>
 						<pre class="mt-1 text-[10px] overflow-x-auto">{JSON.stringify(rawUserFees, null, 2)}</pre>
+					</details>
+					<details>
+						<summary class="text-[11px] cursor-pointer">userRateLimit</summary>
+						<pre class="mt-1 text-[10px] overflow-x-auto">{JSON.stringify(rawUserRateLimit, null, 2)}</pre>
 					</details>
 					<details>
 						<summary class="text-[11px] cursor-pointer">userAbstraction</summary>
