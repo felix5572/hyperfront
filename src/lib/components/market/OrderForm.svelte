@@ -48,6 +48,19 @@
 			accountStore.spotBalancesFull.find((b) => b.coin === 'USDC')?.total ?? '0'
 		)
 	);
+	const stablecoinBalance = $derived(isSpot ? usdcBalance : quoteBalance);
+	const midPxNum = $derived(parseFloat(midPx ?? ''));
+	const baseHoldingValueAtMid = $derived(
+		Number.isFinite(baseBalance) && baseBalance > 0 && Number.isFinite(midPxNum) && midPxNum > 0
+			? baseBalance * midPxNum
+			: 0
+	);
+	const allocationSliderDisabled = $derived(
+		!Number.isFinite(stablecoinBalance) ||
+		stablecoinBalance < 1 ||
+		!Number.isFinite(baseHoldingValueAtMid) ||
+		baseHoldingValueAtMid < 1
+	);
 	const activePriceStr = $derived(
 		orderType === 'limit' ? priceInput.trim() : (midPx ?? '')
 	);
@@ -86,6 +99,11 @@
 
 	function applyAllocation(pct: number) {
 		submitError = null;
+		if (allocationSliderDisabled) {
+			allocationPct = 0;
+			sizeInput = '';
+			return;
+		}
 		if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
 			submitError = 'Allocation must be between 0 and 100';
 			return;
@@ -107,12 +125,7 @@
 			submitError = `${quoteAssetName} balance not available`;
 			return;
 		}
-		if (!Number.isFinite(activePriceNum) || activePriceNum <= 0) {
-			submitError = 'Enter a valid price first';
-			return;
-		}
-		const coinSize = (quoteBalance * (pct / 100)) / activePriceNum;
-		sizeInput = formatSize(coinSize, Math.max(0, szDecimals));
+		sizeInput = formatSize(quoteBalance * (pct / 100), 4);
 	}
 
 	async function submitOrder() {
@@ -196,6 +209,12 @@
 			accountStore.fetchAccountState(addr),
 			accountStore.fetchSpotState(addr)
 		]);
+	});
+
+	$effect(() => {
+		if (allocationSliderDisabled && allocationPct !== 0) {
+			allocationPct = 0;
+		}
 	});
 </script>
 
@@ -315,10 +334,16 @@
 				max="100"
 				step="1"
 				bind:value={allocationPct}
+				disabled={allocationSliderDisabled}
 				oninput={() => applyAllocation(allocationPct)}
-				class="w-full"
+				class="w-full disabled:opacity-50 disabled:cursor-not-allowed"
 				aria-label="Allocation slider"
 			/>
+			{#if allocationSliderDisabled}
+				<p class="mt-1 text-[10px] text-gray-500">
+					Slider disabled: requires stablecoin balance >= $1 and base asset mid-value >= $1.
+				</p>
+			{/if}
 		</div>
 	</div>
 
@@ -328,16 +353,33 @@
 				<span>Reduce Only</span>
 				<input type="checkbox" bind:checked={reduceOnly} />
 			</label>
-			<div class="flex items-center justify-between gap-2">
-					<div class="flex items-center gap-1">
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-1 relative">
 						<span class="text-[11px] text-gray-600">TIF</span>
 						<button
 							type="button"
 							class="w-4 h-4 rounded-full border border-border-primary text-[10px] text-gray-500 leading-none"
 							aria-expanded={showTifHelp}
 							aria-label="Show TIF help"
-							onclick={() => showTifHelp = !showTifHelp}
+							onclick={(e) => {
+								e.stopPropagation();
+								showTifHelp = !showTifHelp;
+							}}
 						>?</button>
+						{#if showTifHelp}
+							<button
+								type="button"
+								class="fixed inset-0 z-10 cursor-default"
+								aria-label="Close TIF help"
+								onclick={() => showTifHelp = false}
+							/>
+							<div class="absolute left-0 top-5 z-20 w-64 rounded-md border border-border-primary bg-surface-secondary p-2 shadow-lg text-[10px] text-gray-600 leading-relaxed">
+								<p>Reduce Only: An order that reduces a current position as opposed to opening a new position in the opposite direction.</p>
+								<p class="mt-1">Good Til Cancel (GTC): An order that rests on the order book until it is filled or canceled.</p>
+								<p class="mt-1">Post Only (ALO): An order that is added to the order book but does not execute immediately.</p>
+								<p class="mt-1">Immediate or Cancel (IOC): An order that will be canceled if it is not immediately filled.</p>
+							</div>
+						{/if}
 					</div>
 					<select
 						bind:value={tif}
@@ -348,14 +390,6 @@
 					<option value="Alo">ALO</option>
 					</select>
 				</div>
-				{#if showTifHelp}
-					<div class="text-[10px] text-gray-500 leading-relaxed border border-border-secondary rounded p-2 bg-surface-secondary">
-						<p>Reduce Only: An order that reduces a current position as opposed to opening a new position in the opposite direction.</p>
-						<p class="mt-1">Good Til Cancel (GTC): An order that rests on the order book until it is filled or canceled.</p>
-						<p class="mt-1">Post Only (ALO): An order that is added to the order book but does not execute immediately.</p>
-						<p class="mt-1">Immediate or Cancel (IOC): An order that will be canceled if it is not immediately filled.</p>
-					</div>
-				{/if}
 			</div>
 		{/if}
 
