@@ -7,6 +7,7 @@
 	import AddressInput from '$components/portfolio/AddressInput.svelte';
 	import PositionCard from '$components/portfolio/PositionCard.svelte';
 	import SpotBalances from '$components/portfolio/SpotBalances.svelte';
+	import { formatUsd } from '$utils/format';
 
 	let subscribedUser: `0x${string}` | null = null;
 	let lastAddressFromQuery = $state<`0x${string}` | null>(null);
@@ -50,6 +51,18 @@
 	const totalPerpPositions = $derived(
 		accountStore.perpDexPositionGroups.reduce((acc, g) => acc + g.positions.length, 0)
 	);
+
+	const STABLES = ['USDC', 'USDT', 'USDT0', 'USDE', 'USDH'];
+	const perpAccountValue = $derived(parseFloat(accountStore.marginSummary?.accountValue ?? '0'));
+	const totalSpotUsd = $derived(
+		accountStore.spotBalancesFull.reduce((sum, b) => {
+			if (STABLES.includes(b.coin)) return sum + parseFloat(b.total);
+			const mid = marketStore.allMids[b.coin];
+			if (!mid) return sum;
+			return sum + parseFloat(b.total) * parseFloat(mid);
+		}, 0)
+	);
+	const totalValue = $derived(perpAccountValue + totalSpotUsd);
 </script>
 
 <svelte:head>
@@ -69,6 +82,22 @@
 			<div class="text-sm text-gray-500">Loading account data...</div>
 		</div>
 	{:else if hasData}
+		<!-- Value Summary -->
+		<div class="grid grid-cols-3 divide-x divide-border-secondary border-b border-border-secondary">
+			<div class="px-3 py-2.5 text-center">
+				<p class="text-[10px] text-gray-500 mb-0.5">合约账户</p>
+				<p class="text-sm font-semibold tabular-nums">{formatUsd(perpAccountValue, true)}</p>
+			</div>
+			<div class="px-3 py-2.5 text-center">
+				<p class="text-[10px] text-gray-500 mb-0.5">现货总值</p>
+				<p class="text-sm font-semibold tabular-nums">{formatUsd(totalSpotUsd, true)}</p>
+			</div>
+			<div class="px-3 py-2.5 text-center">
+				<p class="text-[10px] text-gray-500 mb-0.5">总计</p>
+				<p class="text-sm font-bold tabular-nums text-accent">{formatUsd(totalValue, true)}</p>
+			</div>
+		</div>
+
 		<!-- Perp Positions -->
 		<div class="px-4 pb-2">
 			<h3 class="text-xs text-gray-500 uppercase tracking-wide mb-2">

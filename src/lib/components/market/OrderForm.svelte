@@ -336,14 +336,9 @@
 				bind:value={allocationPct}
 				disabled={allocationSliderDisabled}
 				oninput={() => applyAllocation(allocationPct)}
-				class="w-full disabled:opacity-50 disabled:cursor-not-allowed"
+				class="allocation-slider w-full disabled:opacity-40 disabled:cursor-not-allowed"
 				aria-label="Allocation slider"
 			/>
-			{#if allocationSliderDisabled}
-				<p class="mt-1 text-[10px] text-gray-500">
-					Slider disabled: requires stablecoin balance >= $1 and base asset mid-value >= $1.
-				</p>
-			{/if}
 		</div>
 	</div>
 
@@ -412,3 +407,58 @@
 		{/if}
 	</button>
 </div>
+
+<style>
+	.allocation-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		height: 22px;
+		background: transparent;
+		cursor: pointer;
+	}
+
+	/* Track */
+	.allocation-slider::-webkit-slider-runnable-track {
+		height: 6px;
+		border-radius: 9999px;
+		background-color: #d1d5db;
+	}
+	.allocation-slider::-moz-range-track {
+		height: 6px;
+		border-radius: 9999px;
+		background-color: #d1d5db;
+	}
+
+	/* Thumb */
+	.allocation-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background-color: var(--color-accent, #3b82f6);
+		margin-top: -9px;
+		cursor: pointer;
+		border: 2px solid white;
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	}
+	.allocation-slider::-moz-range-thumb {
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background-color: var(--color-accent, #3b82f6);
+		border: 2px solid white;
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+		cursor: pointer;
+	}
+
+	/* Disabled state */
+	.allocation-slider:disabled::-webkit-slider-thumb {
+		background-color: #9ca3af;
+		cursor: not-allowed;
+	}
+	.allocation-slider:disabled::-moz-range-thumb {
+		background-color: #9ca3af;
+		cursor: not-allowed;
+	}
+</style>
