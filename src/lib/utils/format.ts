@@ -109,17 +109,9 @@ export function formatSize(value: number | string, szDecimals = 0): string {
 // =============================================================================
 
 // Format USD value with appropriate precision
-export function formatUsd(value: number | string, compact = false): string {
+export function formatUsd(value: number | string, _compact = false): string {
 	const num = typeof value === 'string' ? parseFloat(value) : value;
 	if (isNaN(num)) return '$0.00';
-
-	if (compact && Math.abs(num) >= 1_000_000) {
-		return `$${(num / 1_000_000).toFixed(2)}M`;
-	}
-	if (compact && Math.abs(num) >= 1_000) {
-		return `$${(num / 1_000).toFixed(1)}K`;
-	}
-
 	return num.toLocaleString('en-US', {
 		style: 'currency',
 		currency: 'USD',

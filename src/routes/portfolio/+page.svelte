@@ -24,10 +24,11 @@
 		}
 	});
 
-	// Ensure allMids subscription is active (for spot USD values)
+	// Ensure price data is available for spot value calculation
 	$effect(() => {
-		if (accountStore.viewAddress && Object.keys(marketStore.allMids).length === 0) {
-			marketStore.initMids();
+		if (accountStore.viewAddress) {
+			if (Object.keys(marketStore.allMids).length === 0) marketStore.initMids();
+			if (marketStore.spotAssets.length === 0) void marketStore.fetchSpotMeta();
 		}
 	});
 
@@ -77,6 +78,16 @@
 		}, 0)
 	);
 	const totalValue = $derived(perpAccountValue + totalSpotUsd);
+
+	// True when any non-zero, non-stable spot balance has no price yet
+	const spotPricesMissing = $derived(
+		accountStore.spotBalancesFull.some(
+			(b) =>
+				!STABLES.includes(b.coin) &&
+				parseFloat(b.total) !== 0 &&
+				!marketStore.getSpotMidPrice(b.coin, b.token)
+		)
+	);
 </script>
 
 <svelte:head>
@@ -104,11 +115,15 @@
 			</div>
 			<div class="px-3 py-2.5 text-center">
 				<p class="text-[10px] text-gray-500 mb-0.5">Spot Value</p>
-				<p class="text-sm font-semibold tabular-nums">{formatUsd(totalSpotUsd, true)}</p>
+				<p class="text-sm font-semibold tabular-nums" title={spotPricesMissing ? 'Some prices still loading' : undefined}>
+					{spotPricesMissing ? '~' : ''}{formatUsd(totalSpotUsd, true)}
+				</p>
 			</div>
 			<div class="px-3 py-2.5 text-center">
 				<p class="text-[10px] text-gray-500 mb-0.5">Total</p>
-				<p class="text-sm font-bold tabular-nums text-accent">{formatUsd(totalValue, true)}</p>
+				<p class="text-sm font-bold tabular-nums text-accent" title={spotPricesMissing ? 'Some prices still loading' : undefined}>
+					{spotPricesMissing ? '~' : ''}{formatUsd(totalValue, true)}
+				</p>
 			</div>
 		</div>
 

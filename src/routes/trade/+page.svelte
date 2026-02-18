@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { walletStore } from '$stores/wallet.svelte';
+	import { accountStore } from '$stores/account.svelte';
 	import { infoClient } from '$api/client';
 	import { subscriptionStatus } from '$api/subscriptions';
 	import AddressInput from '$components/portfolio/AddressInput.svelte';
@@ -61,7 +62,8 @@
 		userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 	};
 
-	let viewAddress = $state<`0x${string}` | null>(null);
+	// Shared address: driven by accountStore.viewAddress (same as Portfolio/Orders)
+	let infoLoadedFor = $state<string | null>(null);
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
 	let installError = $state<string | null>(null);
@@ -120,7 +122,7 @@
 	}
 
 	async function loadInfo(user: `0x${string}`) {
-		viewAddress = user;
+		infoLoadedFor = user;
 		loading = true;
 		loadError = null;
 		try {
@@ -197,10 +199,11 @@
 		};
 	});
 
+	// React to shared address (from Portfolio/Orders) or wallet auto-connect
 	$effect(() => {
-		const addr = walletStore.address;
-		if (addr && !viewAddress) {
-			loadInfo(addr);
+		const addr = accountStore.viewAddress ?? walletStore.address ?? null;
+		if (addr && addr !== infoLoadedFor) {
+			void loadInfo(addr as `0x${string}`);
 		}
 	});
 </script>
@@ -211,10 +214,13 @@
 
 <div class="flex flex-col h-full overflow-y-auto">
 	<AddressInput
-		onView={(addr) => loadInfo(addr)}
+		onView={(addr) => {
+			void accountStore.loadAddress(addr);
+			void loadInfo(addr);
+		}}
 		loading={loading}
 		showConnectWallet
-		currentViewAddress={viewAddress}
+		currentViewAddress={accountStore.viewAddress}
 	/>
 
 	{#if showInstallTips}
@@ -312,7 +318,7 @@
 		</div>
 	{/if}
 
-	{#if !viewAddress && !loading}
+	{#if !accountStore.viewAddress && !loading}
 		<div class="flex-1 flex items-center justify-center p-8 text-center text-sm text-gray-500">
 			Enter an address (or connect wallet) to load user info.
 		</div>
@@ -324,10 +330,10 @@
 				<h2 class="text-sm font-semibold">User Info</h2>
 				<button
 					class="text-[11px] px-2 py-1 rounded border border-border-primary text-gray-600 hover:bg-surface-hover"
-					onclick={() => viewAddress && loadInfo(viewAddress)}
+					onclick={() => accountStore.viewAddress && loadInfo(accountStore.viewAddress)}
 				>Refresh</button>
 			</div>
-			<p class="text-[11px] text-gray-500 font-mono mt-1 break-all">{viewAddress}</p>
+			<p class="text-[11px] text-gray-500 font-mono mt-1 break-all">{accountStore.viewAddress}</p>
 		</div>
 
 		<div class="px-4 pb-4 space-y-3">
