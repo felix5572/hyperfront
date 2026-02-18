@@ -51,7 +51,7 @@ export function onAccountsChanged(
 	callback: (accounts: string[]) => void
 ): () => void {
 	const provider = getInjectedProvider();
-	if (!provider) return () => {};
+	if (!provider) return () => { };
 
 	const handler = (...args: unknown[]) => callback(args[0] as string[]);
 	provider.on('accountsChanged', handler);
@@ -60,7 +60,7 @@ export function onAccountsChanged(
 
 export function onChainChanged(callback: (chainId: string) => void): () => void {
 	const provider = getInjectedProvider();
-	if (!provider) return () => {};
+	if (!provider) return () => { };
 
 	const handler = (...args: unknown[]) => callback(args[0] as string);
 	provider.on('chainChanged', handler);
@@ -83,7 +83,7 @@ export function hasInjectedWallet(): boolean {
 // ─── WalletConnect ──────────────────────────────────────────────────
 
 // Replace with your own projectId from https://cloud.walletconnect.com
-const WALLETCONNECT_PROJECT_ID = 'YOUR_WALLETCONNECT_PROJECT_ID';
+const WALLETCONNECT_PROJECT_ID = 'd4deeac57a8cdbe013059f1680b15656';
 
 // Lazy-loaded WalletConnect provider singleton
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,11 +112,24 @@ async function getOrCreateWCProvider() {
 export async function connectWalletConnect(): Promise<ConnectResult> {
 	const provider = await getOrCreateWCProvider();
 
-	// This triggers the QR modal / deep link
-	await provider.connect();
+	try {
+		// WalletConnect relay errors surface through event callbacks, not the promise.
+		// Race against a timeout so we don't hang forever if the relay rejects us.
+		await Promise.race([
+			provider.connect(),
+			new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error('WalletConnect connection timed out (60 s)')), 60_000)
+			)
+		]);
+	} catch (e) {
+		// Reset singleton so the next attempt gets a fresh provider instance
+		wcProvider = null;
+		throw e;
+	}
 
 	const accounts: string[] = provider.accounts;
 	if (!accounts.length) {
+		wcProvider = null;
 		throw new Error('No accounts returned from WalletConnect.');
 	}
 
@@ -175,14 +188,14 @@ export async function reconnectWalletConnect(): Promise<ConnectResult | null> {
 export function onWalletConnectAccountsChanged(
 	callback: (accounts: string[]) => void
 ): () => void {
-	if (!wcProvider) return () => {};
+	if (!wcProvider) return () => { };
 	const handler = (accs: string[]) => callback(accs);
 	wcProvider.on('accountsChanged', handler);
 	return () => wcProvider?.removeListener('accountsChanged', handler);
 }
 
 export function onWalletConnectDisconnect(callback: () => void): () => void {
-	if (!wcProvider) return () => {};
+	if (!wcProvider) return () => { };
 	const handler = () => callback();
 	wcProvider.on('disconnect', handler);
 	return () => wcProvider?.removeListener('disconnect', handler);
