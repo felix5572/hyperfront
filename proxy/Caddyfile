@@ -1,4 +1,6 @@
 :8080 {
+	respond /health 200
+
 	@exchange {
 		method POST
 		path /exchange
