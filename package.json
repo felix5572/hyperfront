@@ -25,6 +25,7 @@
 	"dependencies": {
 		"@nktkas/hyperliquid": "^0.31.0",
 		"@tailwindcss/vite": "^4.1.18",
+		"@walletconnect/ethereum-provider": "^2.23.5",
 		"lightweight-charts": "^5.1.0",
 		"lightweight-charts-svelte": "^0.0.1",
 		"tailwindcss": "^4.1.18",

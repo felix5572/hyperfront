@@ -16,11 +16,15 @@ function getInjectedProvider(): EIP1193Provider | null {
 
 export type { EIP1193Provider };
 
-// Request wallet connection, returns address
-export async function connectInjectedWallet(): Promise<{
+export type ConnectResult = {
 	address: `0x${string}`;
 	walletClient: WalletClient<Transport, Chain>;
-}> {
+};
+
+// ─── Injected wallet ────────────────────────────────────────────────
+
+// Request wallet connection, returns address
+export async function connectInjectedWallet(): Promise<ConnectResult> {
 	const provider = getInjectedProvider();
 	if (!provider) {
 		throw new Error('No wallet detected. Please install MetaMask or another EIP-1193 wallet.');
@@ -69,4 +73,117 @@ export async function getConnectedAccounts(): Promise<string[]> {
 	if (!provider) return [];
 	const accounts = (await provider.request({ method: 'eth_accounts' })) as string[];
 	return accounts;
+}
+
+// Check if injected wallet is available
+export function hasInjectedWallet(): boolean {
+	return getInjectedProvider() !== null;
+}
+
+// ─── WalletConnect ──────────────────────────────────────────────────
+
+// Replace with your own projectId from https://cloud.walletconnect.com
+const WALLETCONNECT_PROJECT_ID = 'YOUR_WALLETCONNECT_PROJECT_ID';
+
+// Lazy-loaded WalletConnect provider singleton
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let wcProvider: any = null;
+
+async function getOrCreateWCProvider() {
+	if (wcProvider) return wcProvider;
+
+	const { default: EthereumProvider } = await import('@walletconnect/ethereum-provider');
+
+	wcProvider = await EthereumProvider.init({
+		projectId: WALLETCONNECT_PROJECT_ID,
+		chains: [42161], // Arbitrum
+		showQrModal: true,
+		metadata: {
+			name: 'Hyperfront',
+			description: 'Hyperfront Trading',
+			url: typeof window !== 'undefined' ? window.location.origin : 'https://hyperfront.app',
+			icons: [typeof window !== 'undefined' ? `${window.location.origin}/icons/icon-192.png` : '']
+		}
+	});
+
+	return wcProvider;
+}
+
+export async function connectWalletConnect(): Promise<ConnectResult> {
+	const provider = await getOrCreateWCProvider();
+
+	// This triggers the QR modal / deep link
+	await provider.connect();
+
+	const accounts: string[] = provider.accounts;
+	if (!accounts.length) {
+		throw new Error('No accounts returned from WalletConnect.');
+	}
+
+	const address = accounts[0] as `0x${string}`;
+
+	const walletClient = createWalletClient({
+		account: address,
+		chain: arbitrum,
+		transport: custom(provider)
+	});
+
+	return { address, walletClient };
+}
+
+export async function disconnectWalletConnect(): Promise<void> {
+	if (wcProvider) {
+		await wcProvider.disconnect();
+		wcProvider = null;
+	}
+}
+
+// Check if there's an active WalletConnect session that can be restored
+export async function hasWalletConnectSession(): Promise<boolean> {
+	try {
+		const provider = await getOrCreateWCProvider();
+		return provider.session != null;
+	} catch {
+		return false;
+	}
+}
+
+// Reconnect using an existing WalletConnect session (no QR modal)
+export async function reconnectWalletConnect(): Promise<ConnectResult | null> {
+	try {
+		const provider = await getOrCreateWCProvider();
+		if (!provider.session) return null;
+
+		const accounts: string[] = provider.accounts;
+		if (!accounts.length) return null;
+
+		const address = accounts[0] as `0x${string}`;
+
+		const walletClient = createWalletClient({
+			account: address,
+			chain: arbitrum,
+			transport: custom(provider)
+		});
+
+		return { address, walletClient };
+	} catch {
+		return null;
+	}
+}
+
+// Listen for WalletConnect events
+export function onWalletConnectAccountsChanged(
+	callback: (accounts: string[]) => void
+): () => void {
+	if (!wcProvider) return () => {};
+	const handler = (accs: string[]) => callback(accs);
+	wcProvider.on('accountsChanged', handler);
+	return () => wcProvider?.removeListener('accountsChanged', handler);
+}
+
+export function onWalletConnectDisconnect(callback: () => void): () => void {
+	if (!wcProvider) return () => {};
+	const handler = () => callback();
+	wcProvider.on('disconnect', handler);
+	return () => wcProvider?.removeListener('disconnect', handler);
 }
