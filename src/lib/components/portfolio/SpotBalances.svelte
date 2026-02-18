@@ -10,21 +10,13 @@
 		)
 	);
 
-	function getMidPrice(coin: string, tokenIndex: number): string | null {
-		const mids = marketStore.allMids;
-		if (mids[coin]) return mids[coin];
-		const spot = marketStore.spotAssets.find(
-			(a) => a.token.name === coin || a.token.index === tokenIndex
-		);
-		return spot?.ctx?.midPx && spot.ctx.midPx !== '0' ? spot.ctx.midPx : null;
-	}
+	const STABLES = ['USDC', 'USDT', 'USDT0', 'USDE', 'USDH'];
 
 	function getUsdValue(coin: string, total: string, tokenIndex: number): number {
-		const stablecoins = ['USDC', 'USDT', 'USDT0', 'USDE', 'USDH'];
-		if (stablecoins.includes(coin)) return parseFloat(total);
-		const mid = getMidPrice(coin, tokenIndex);
+		if (STABLES.includes(coin)) return parseFloat(total);
+		const mid = marketStore.getSpotMidPrice(coin, tokenIndex);
 		if (!mid) return 0;
-		return parseFloat(total) * parseFloat(mid);
+		return parseFloat(total) * mid;
 	}
 
 	function pnlPct(currentVal: number, entryNtl: number): number | null {

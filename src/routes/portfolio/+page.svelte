@@ -53,13 +53,27 @@
 	);
 
 	const STABLES = ['USDC', 'USDT', 'USDT0', 'USDE', 'USDH'];
-	const perpAccountValue = $derived(parseFloat(accountStore.marginSummary?.accountValue ?? '0'));
+
+	// Sum across all DEXes when WS data is available; fall back to REST main-DEX value
+	const perpAccountValue = $derived.by(() => {
+		const allDexs = accountStore.allDexsClearinghouse;
+		if (allDexs.length > 0) {
+			return allDexs.reduce((sum, [, state]) => {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const s = state as any;
+				const val = parseFloat(s?.crossMarginSummary?.accountValue ?? '0');
+				return sum + (Number.isFinite(val) ? val : 0);
+			}, 0);
+		}
+		return parseFloat(accountStore.marginSummary?.accountValue ?? '0');
+	});
+
 	const totalSpotUsd = $derived(
 		accountStore.spotBalancesFull.reduce((sum, b) => {
 			if (STABLES.includes(b.coin)) return sum + parseFloat(b.total);
-			const mid = marketStore.allMids[b.coin];
+			const mid = marketStore.getSpotMidPrice(b.coin, b.token);
 			if (!mid) return sum;
-			return sum + parseFloat(b.total) * parseFloat(mid);
+			return sum + parseFloat(b.total) * mid;
 		}, 0)
 	);
 	const totalValue = $derived(perpAccountValue + totalSpotUsd);
@@ -85,15 +99,15 @@
 		<!-- Value Summary -->
 		<div class="grid grid-cols-3 divide-x divide-border-secondary border-b border-border-secondary">
 			<div class="px-3 py-2.5 text-center">
-				<p class="text-[10px] text-gray-500 mb-0.5">合约账户</p>
+				<p class="text-[10px] text-gray-500 mb-0.5">Perp Account</p>
 				<p class="text-sm font-semibold tabular-nums">{formatUsd(perpAccountValue, true)}</p>
 			</div>
 			<div class="px-3 py-2.5 text-center">
-				<p class="text-[10px] text-gray-500 mb-0.5">现货总值</p>
+				<p class="text-[10px] text-gray-500 mb-0.5">Spot Value</p>
 				<p class="text-sm font-semibold tabular-nums">{formatUsd(totalSpotUsd, true)}</p>
 			</div>
 			<div class="px-3 py-2.5 text-center">
-				<p class="text-[10px] text-gray-500 mb-0.5">总计</p>
+				<p class="text-[10px] text-gray-500 mb-0.5">Total</p>
 				<p class="text-sm font-bold tabular-nums text-accent">{formatUsd(totalValue, true)}</p>
 			</div>
 		</div>

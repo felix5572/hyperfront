@@ -14,7 +14,7 @@
 	}
 </script>
 
-<nav class="flex items-center justify-around h-14 bg-surface-secondary/95 border-t border-border-secondary shrink-0 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm">
+<nav class="flex items-center justify-around h-[calc(3.5rem+env(safe-area-inset-bottom))] bg-surface-secondary/95 border-t border-border-secondary shrink-0 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm">
 	{#each tabs as tab}
 		{@const active = isActive(tab.href)}
 		<a

@@ -477,6 +477,18 @@ function getCoinPriceParams(coin: string): { szDecimals: number; isSpot: boolean
 	return { szDecimals: 0, isSpot: false };
 }
 
+/**
+ * Resolve a spot token's mid price.
+ * Tries allMids[coin] first (works for perp coins like "BTC"), then falls back
+ * to spotAssets ctx.midPx matched by token name or index.
+ */
+function getSpotMidPrice(coin: string, tokenIndex: number): number | null {
+	if (allMids[coin]) return parseFloat(allMids[coin]);
+	const spot = spotAssets.find((a) => a.token.name === coin || a.token.index === tokenIndex);
+	const mid = spot?.ctx?.midPx;
+	return mid && mid !== '0' ? parseFloat(mid) : null;
+}
+
 /** Resolve coin (e.g. "BTC", "@260") to asset index. Perp = universe index; spot = 10000 + pair index. */
 function getAssetId(coin: string): number | null {
 	const perp = findPerpAsset(coin);
@@ -531,6 +543,7 @@ export const marketStore = {
 	findPerpAsset,
 	findSpotAsset,
 	getAssetId,
+	getSpotMidPrice,
 	getCoinPriceParams,
 	fetchPerpMeta,
 	fetchSpotMeta,
