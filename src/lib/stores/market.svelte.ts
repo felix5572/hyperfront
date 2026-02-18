@@ -138,6 +138,8 @@ let hip3CollateralToken = $state(0);
 let hip3Loading = $state(false);
 // Pre-merged assets from all HIP-3 DEXes
 let hip3AllAssets = $state<PerpAsset[]>([]);
+let hip3AllInFlight: Promise<void> | null = null;
+const hip3DexInFlight = new Map<string, Promise<void>>();
 
 // All mids (shared across pages)
 let allMids = $state<Record<string, string>>({});
@@ -304,57 +306,78 @@ async function fetchHip3Meta(dex: string, force = false) {
 		hip3CollateralToken = cached.collateralToken;
 		return;
 	}
-	hip3Loading = true;
-	const result = await infoClient.metaAndAssetCtxs({ dex });
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const [meta, ctxs] = result as any;
-	const metas = meta?.universe ?? [];
-	const contexts = ctxs ?? [];
-	const collateralToken = meta?.collateralToken ?? 0;
-	hip3Metas = metas;
-	hip3Ctxs = contexts;
-	hip3CollateralToken = collateralToken;
-	hip3DexCache = {
-		...hip3DexCache,
-		[dex]: {
-			metas,
-			ctxs: contexts,
-			collateralToken,
-			fetchedAt: Date.now()
+	if (!force) {
+		const inFlight = hip3DexInFlight.get(dex);
+		if (inFlight) return inFlight;
+	}
+	const task = (async () => {
+		hip3Loading = true;
+		try {
+			const result = await infoClient.metaAndAssetCtxs({ dex });
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const [meta, ctxs] = result as any;
+			const metas = meta?.universe ?? [];
+			const contexts = ctxs ?? [];
+			const collateralToken = meta?.collateralToken ?? 0;
+			hip3Metas = metas;
+			hip3Ctxs = contexts;
+			hip3CollateralToken = collateralToken;
+			hip3DexCache = {
+				...hip3DexCache,
+				[dex]: {
+					metas,
+					ctxs: contexts,
+					collateralToken,
+					fetchedAt: Date.now()
+				}
+			};
+		} finally {
+			hip3Loading = false;
+			hip3DexInFlight.delete(dex);
 		}
-	};
-	hip3Loading = false;
+	})();
+	hip3DexInFlight.set(dex, task);
+	return task;
 }
 
 // Fetch all HIP-3 DEXes in parallel and merge into a single list
 async function fetchAllHip3(force = false) {
 	if (!force && hip3AllAssets.length > 0 && isFresh(hip3AllFetchedAt)) return;
-	hip3Loading = true;
-	const results = await Promise.all(
-		hip3Dexes.map((dex) => infoClient.metaAndAssetCtxs({ dex: dex.name }))
-	);
-	const merged: PerpAsset[] = [];
-	results.forEach((result, idx) => {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const [meta, ctxs] = result as any;
-		const metas: AssetMeta[] = meta?.universe ?? [];
-		const contexts: AssetCtx[] = ctxs ?? [];
-		const dexIndex = hip3Dexes[idx].perpDexIndex;
-		const quoteCurrency = getQuoteCurrency(meta?.collateralToken ?? 0);
-		metas.forEach((m, i) => {
-			if (!m.isDelisted) {
-				merged.push({
-					meta: m,
-					ctx: contexts[i] ?? {} as AssetCtx,
-					assetId: 100000 + dexIndex * 10000 + i,
-					quoteCurrency
+	if (!force && hip3AllInFlight) return hip3AllInFlight;
+	const task = (async () => {
+		hip3Loading = true;
+		try {
+			const results = await Promise.all(
+				hip3Dexes.map((dex) => infoClient.metaAndAssetCtxs({ dex: dex.name }))
+			);
+			const merged: PerpAsset[] = [];
+			results.forEach((result, idx) => {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const [meta, ctxs] = result as any;
+				const metas: AssetMeta[] = meta?.universe ?? [];
+				const contexts: AssetCtx[] = ctxs ?? [];
+				const dexIndex = hip3Dexes[idx].perpDexIndex;
+				const quoteCurrency = getQuoteCurrency(meta?.collateralToken ?? 0);
+				metas.forEach((m, i) => {
+					if (!m.isDelisted) {
+						merged.push({
+							meta: m,
+							ctx: contexts[i] ?? {} as AssetCtx,
+							assetId: 100000 + dexIndex * 10000 + i,
+							quoteCurrency
+						});
+					}
 				});
-			}
-		});
-	});
-	hip3AllAssets = merged.sort(byVolume);
-	hip3AllFetchedAt = Date.now();
-	hip3Loading = false;
+			});
+			hip3AllAssets = merged.sort(byVolume);
+			hip3AllFetchedAt = Date.now();
+		} finally {
+			hip3Loading = false;
+			hip3AllInFlight = null;
+		}
+	})();
+	hip3AllInFlight = task;
+	return task;
 }
 
 // Select a HIP-3 DEX sub-tab (or "__all__" for all DEXes)
@@ -410,9 +433,10 @@ async function unselectCoin() {
 // Initialize market overview (list page)
 async function initMarketList(force = false) {
 	await Promise.allSettled([fetchPerpMeta(force), fetchSpotMeta(force), fetchPerpDexs(force), initMids()]);
-	// Preload HIP-3 assets in the background so switching to the HIP-3 tab is immediate.
+	// Preload HIP-3 assets in the background. Do not await this to avoid blocking
+	// route transitions or first-page interactions when data size is large.
 	if (hip3Dexes.length > 0) {
-		await fetchAllHip3(force);
+		void fetchAllHip3(force);
 	}
 }
 

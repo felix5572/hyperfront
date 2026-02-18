@@ -202,19 +202,50 @@
 				{@const displayName = perp ? perp.meta.name : spot ? spot.displayName : order.coin}
 				{@const rawCoin = spot ? spot.pair.name : order.coin}
 				{@const orderValue = parseFloat(order.limitPx) * parseFloat(order.sz)}
-				<span class="font-medium min-w-0 py-2 border-b border-border-secondary hover:bg-surface-hover">
-					<span class="inline-flex items-center gap-1 max-w-full">
+				<span class="font-medium min-w-0 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
+					<span class="h-10 flex flex-col justify-center leading-tight">
 						<span class="truncate">{displayName}</span>
+						<span class="text-[10px] text-gray-500 font-normal truncate">
+							{#if rawCoin !== displayName}
+								{rawCoin}
+							{:else}
+								&nbsp;
+							{/if}
+						</span>
 					</span>
-					{#if rawCoin !== displayName}<span class="text-[10px] text-gray-500 font-normal ml-1">{rawCoin}</span>{/if}
 				</span>
-				<span class="{isBuy ? 'text-long' : 'text-short'} font-medium text-center py-2 border-b border-border-secondary hover:bg-surface-hover">{isBuy ? 'BUY' : 'SELL'}</span>
-				<span class="text-right tabular-nums font-semibold font-mono tracking-tight text-gray-900 py-2 border-b border-border-secondary hover:bg-surface-hover">${formatPrice(order.limitPx, pp.szDecimals, pp.isSpot)}</span>
-				<span class="text-right tabular-nums font-mono py-2 border-b border-border-secondary hover:bg-surface-hover">{formatSize(order.sz, pp.szDecimals)}</span>
-				<span class="text-right tabular-nums font-semibold font-mono tracking-tight text-gray-900 py-2 border-b border-border-secondary hover:bg-surface-hover">{formatUsd(orderValue)}</span>
-				<span class="text-right tabular-nums text-gray-500 py-2 border-b border-border-secondary hover:bg-surface-hover">{formatTime(order.timestamp)}</span>
-				<span class="py-2 border-b border-border-secondary text-right">
-					<div class="flex items-center justify-end gap-1">
+				<span class="{isBuy ? 'text-long' : 'text-short'} font-medium text-center py-1.5 border-b border-border-secondary hover:bg-surface-hover">
+					<span class="h-10 flex flex-col items-center justify-center leading-tight">
+						<span>{isBuy ? 'BUY' : 'SELL'}</span>
+						<span class="text-[10px] text-gray-500">{order.reduceOnly ? 'RO' : 'NR'}</span>
+					</span>
+				</span>
+				<span class="text-right tabular-nums font-semibold font-mono tracking-tight text-gray-900 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
+					<span class="h-10 flex flex-col justify-center leading-tight">
+						<span>${formatPrice(order.limitPx, pp.szDecimals, pp.isSpot)}</span>
+						<span class="text-[10px] text-gray-500 font-normal">Limit</span>
+					</span>
+				</span>
+				<span class="text-right tabular-nums font-mono py-1.5 border-b border-border-secondary hover:bg-surface-hover">
+					<span class="h-10 flex flex-col justify-center leading-tight">
+						<span>{formatSize(order.sz, pp.szDecimals)}</span>
+						<span class="text-[10px] text-gray-500">{displayName}</span>
+					</span>
+				</span>
+				<span class="text-right tabular-nums font-semibold font-mono tracking-tight text-gray-900 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
+					<span class="h-10 flex flex-col justify-center leading-tight">
+						<span>{formatUsd(orderValue)}</span>
+						<span class="text-[10px] text-gray-500 font-normal">Notional</span>
+					</span>
+				</span>
+				<span class="text-right tabular-nums text-gray-500 py-1.5 border-b border-border-secondary hover:bg-surface-hover">
+					<span class="h-10 flex flex-col justify-center leading-tight">
+						<span>{formatTime(order.timestamp)}</span>
+						<span class="text-[10px] text-gray-400">OID {order.oid}</span>
+					</span>
+				</span>
+				<span class="py-1.5 border-b border-border-secondary text-right">
+					<div class="h-10 flex items-center justify-end gap-1">
 						<button
 							class="w-6 h-6 inline-flex items-center justify-center rounded border border-border-primary text-gray-700 hover:bg-surface-hover disabled:opacity-50"
 							title="Modify order"
