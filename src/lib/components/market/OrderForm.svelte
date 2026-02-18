@@ -372,7 +372,7 @@
 								class="fixed inset-0 z-10 cursor-default"
 								aria-label="Close TIF help"
 								onclick={() => showTifHelp = false}
-							/>
+							></button>
 							<div class="absolute left-0 top-5 z-20 w-64 rounded-md border border-border-primary bg-surface-secondary p-2 shadow-lg text-[10px] text-gray-600 leading-relaxed">
 								<p>Reduce Only: An order that reduces a current position as opposed to opening a new position in the opposite direction.</p>
 								<p class="mt-1">Good Til Cancel (GTC): An order that rests on the order book until it is filled or canceled.</p>
