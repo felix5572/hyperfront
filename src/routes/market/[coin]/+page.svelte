@@ -109,11 +109,11 @@
 		}
 	});
 
-	onDestroy(async () => {
-		await marketStore.unselectCoin();
-		await unsubscribe(`activeAssetCtx:${coin}`);
+	onDestroy(() => {
+		void marketStore.unselectCoin();
+		void unsubscribe(`activeAssetCtx:${coin}`);
 		if (subscribedUser) {
-			await ordersStore.unsubscribeOrders(subscribedUser);
+			void ordersStore.unsubscribeOrders(subscribedUser);
 		}
 	});
 

@@ -433,11 +433,8 @@ async function unselectCoin() {
 // Initialize market overview (list page)
 async function initMarketList(force = false) {
 	await Promise.allSettled([fetchPerpMeta(force), fetchSpotMeta(force), fetchPerpDexs(force), initMids()]);
-	// Preload HIP-3 assets in the background. Do not await this to avoid blocking
-	// route transitions or first-page interactions when data size is large.
-	if (hip3Dexes.length > 0) {
-		void fetchAllHip3(force);
-	}
+	// Do not preload all HIP-3 assets here. The payload can be large and may cause
+	// unnecessary work/jank when users never enter the HIP-3 tab.
 }
 
 // Full init (overview + coin detail)
