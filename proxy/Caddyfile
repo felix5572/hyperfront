@@ -1,0 +1,11 @@
+:8080 {
+	@exchange {
+		method POST
+		path /exchange
+	}
+	reverse_proxy @exchange https://api.hyperliquid.xyz {
+		header_up Host api.hyperliquid.xyz
+	}
+
+	respond 404
+}
