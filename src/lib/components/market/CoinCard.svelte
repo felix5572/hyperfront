@@ -71,7 +71,7 @@
 	<div class="flex items-center gap-3 text-xs text-gray-500">
 		<span>Vol {formatUsd(volume, true)}</span>
 		{#if openInterest}
-			<span>OI {formatUsd(parseFloat(openInterest), true)}</span>
+			<span>OI {formatUsd(parseFloat(openInterest) * mark, true)}</span>
 		{/if}
 		{#if funding}
 			{@const fundingPct = (parseFloat(funding) * 100).toFixed(4)}

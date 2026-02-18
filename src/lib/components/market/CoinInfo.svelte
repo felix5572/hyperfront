@@ -149,7 +149,7 @@
 			{#if ctx?.openInterest}
 				<div class="p-2 bg-surface-tertiary rounded">
 					<p class="text-gray-400 text-[10px]">Open Interest</p>
-					<p class="font-medium tabular-nums">{formatUsd(parseFloat(ctx.openInterest), true)}</p>
+					<p class="font-medium tabular-nums">{formatUsd(parseFloat(ctx.openInterest) * parseFloat(ctx.markPx ?? '0'), true)}</p>
 				</div>
 			{/if}
 			{#if ctx?.dayNtlVlm}

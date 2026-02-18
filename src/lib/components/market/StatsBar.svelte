@@ -36,6 +36,14 @@
 		<span class="ml-1 tabular-nums">{formatUsd(volume, true)}</span>
 	</div>
 
+	<!-- Oracle price (perp only) -->
+	{#if ctx.oraclePx}
+		<div class="shrink-0">
+			<span class="text-gray-500">Oracle</span>
+			<span class="ml-1 tabular-nums">{formatPrice(ctx.oraclePx, szDecimals, isSpot)}</span>
+		</div>
+	{/if}
+
 	<!-- Funding (perp only) -->
 	{#if ctx.funding}
 		{@const fundingPct = (parseFloat(ctx.funding) * 100).toFixed(4)}
@@ -45,11 +53,11 @@
 		</div>
 	{/if}
 
-	<!-- OI (perp only) -->
+	<!-- OI (perp only): openInterest is in coin units → multiply by mark price for USD -->
 	{#if ctx.openInterest}
 		<div class="shrink-0">
 			<span class="text-gray-500">OI</span>
-			<span class="ml-1 tabular-nums">{formatUsd(parseFloat(ctx.openInterest), true)}</span>
+			<span class="ml-1 tabular-nums">{formatUsd(parseFloat(ctx.openInterest) * mark, true)}</span>
 		</div>
 	{/if}
 </div>
