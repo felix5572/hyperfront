@@ -1,4 +1,4 @@
-import type { WalletClient, Transport, Chain } from 'viem';
+import type { WalletClient, Transport } from 'viem';
 import {
 	connectInjectedWallet,
 	connectWalletConnect,
@@ -16,7 +16,7 @@ export type ConnectMethod = 'injected' | 'walletconnect';
 // Reactive wallet state using Svelte 5 runes
 let address = $state<`0x${string}` | null>(null);
 let status = $state<ConnectionStatus>('disconnected');
-let walletClient = $state<WalletClient<Transport, Chain> | null>(null);
+let walletClient = $state<WalletClient<Transport> | null>(null);
 let error = $state<string | null>(null);
 let connectedVia = $state<ConnectMethod | null>(null);
 

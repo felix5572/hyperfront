@@ -1,5 +1,4 @@
-import { createWalletClient, custom, type WalletClient, type Transport, type Chain } from 'viem';
-import { arbitrum } from 'viem/chains';
+import { createWalletClient, custom, type WalletClient, type Transport } from 'viem';
 
 // EIP-1193 provider interface (MetaMask, Rabby, etc.)
 interface EIP1193Provider {
@@ -18,7 +17,10 @@ export type { EIP1193Provider };
 
 export type ConnectResult = {
 	address: `0x${string}`;
-	walletClient: WalletClient<Transport, Chain>;
+	// No chain constraint: Hyperliquid L1 signing uses chainId 1337 in the EIP-712 domain
+	// (hardcoded by the @nktkas/hyperliquid SDK), which is independent of the wallet's
+	// connected chain. We do not send any on-chain transactions to Arbitrum or HyperEVM.
+	walletClient: WalletClient<Transport>;
 };
 
 // ─── Injected wallet ────────────────────────────────────────────────
@@ -37,9 +39,10 @@ export async function connectInjectedWallet(): Promise<ConnectResult> {
 
 	const address = accounts[0] as `0x${string}`;
 
+	// No chain switch: Hyperliquid L1 signing (signL1Action) always uses chainId 1337
+	// in the EIP-712 domain regardless of which network the wallet is on.
 	const walletClient = createWalletClient({
 		account: address,
-		chain: arbitrum,
 		transport: custom(provider)
 	});
 
@@ -96,7 +99,12 @@ async function getOrCreateWCProvider() {
 
 	wcProvider = await EthereumProvider.init({
 		projectId: WALLETCONNECT_PROJECT_ID,
-		chains: [42161], // Arbitrum
+		// optionalChains: WalletConnect requires at least one chain declared for the session.
+		// Arbitrum (42161) is used here for WalletConnect session compatibility — it is
+		// widely supported by mobile wallets. Marked optional because we do not send
+		// on-chain transactions; all order signing uses chainId 1337 in the EIP-712
+		// domain and goes to the Hyperliquid API directly.
+		optionalChains: [42161],
 		showQrModal: true,
 		methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTypedData_v4'],
 		metadata: {
@@ -138,7 +146,6 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 
 	const walletClient = createWalletClient({
 		account: address,
-		chain: arbitrum,
 		transport: custom(provider)
 	});
 
@@ -152,37 +159,26 @@ export async function disconnectWalletConnect(): Promise<void> {
 	}
 }
 
-// Check if there's an active WalletConnect session that can be restored
-export async function hasWalletConnectSession(): Promise<boolean> {
-	try {
-		const provider = await getOrCreateWCProvider();
-		return provider.session != null;
-	} catch {
-		return false;
-	}
-}
-
-// Reconnect using an existing WalletConnect session (no QR modal)
+// Reconnect using an existing WalletConnect session (no QR modal).
+// Returns null only if there is no active session — all other failures throw.
 export async function reconnectWalletConnect(): Promise<ConnectResult | null> {
-	try {
-		const provider = await getOrCreateWCProvider();
-		if (!provider.session) return null;
+	const provider = await getOrCreateWCProvider();
 
-		const accounts: string[] = provider.accounts;
-		if (!accounts.length) return null;
+	if (!provider.session) return null;
 
-		const address = accounts[0] as `0x${string}`;
-
-		const walletClient = createWalletClient({
-			account: address,
-			chain: arbitrum,
-			transport: custom(provider)
-		});
-
-		return { address, walletClient };
-	} catch {
-		return null;
+	const accounts: string[] = provider.accounts;
+	if (!accounts.length) {
+		throw new Error('WalletConnect session exists but returned no accounts.');
 	}
+
+	const address = accounts[0] as `0x${string}`;
+
+	const walletClient = createWalletClient({
+		account: address,
+		transport: custom(provider)
+	});
+
+	return { address, walletClient };
 }
 
 // Listen for WalletConnect events
