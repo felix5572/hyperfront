@@ -1,7 +1,7 @@
 import { signL1Action, signUserSignedAction } from '@nktkas/hyperliquid/signing';
 import type { AbstractWallet } from '@nktkas/hyperliquid/signing';
 import { ApproveAgentTypes } from '@nktkas/hyperliquid/api/exchange';
-import { getExchangeBaseUrl, API_URL } from '$lib/utils/constants';
+import { getExchangeBaseUrl } from '$lib/utils/constants';
 
 export { getExchangeBaseUrl };
 
@@ -295,8 +295,7 @@ export async function approveAgentWallet(
 		action,
 		types: ApproveAgentTypes
 	});
-	// approveAgent is user-signed so it goes directly to Hyperliquid (no proxy needed, avoids CORS)
-	const res = await fetch(`${API_URL}${EXCHANGE_PATH}`, {
+	const res = await fetch(`${getExchangeBaseUrl()}${EXCHANGE_PATH}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ action, nonce, signature })

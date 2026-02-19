@@ -2,13 +2,8 @@ export const API_URL = 'https://api.hyperliquid.xyz';
 export const WS_URL = 'wss://api.hyperliquid.xyz/ws';
 export const INFO_URL = `${API_URL}/info`;
 
-/** Exchange base URL: proxy server for geo-restricted regions.
- *  In dev (localhost), Vite proxies the request to avoid CORS.
- */
+/** Exchange base URL: proxy server for geo-restricted regions. */
 export function getExchangeBaseUrl(): string {
-	if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-		return '/dev-exchange-proxy';
-	}
 	return 'https://api.hyper-front.xyz';
 }
 

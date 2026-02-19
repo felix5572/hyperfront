@@ -4,7 +4,6 @@
 	import { walletStore } from '$stores/wallet.svelte';
 	import { agentStore } from '$stores/agent.svelte';
 	import { formatPrice, formatSize, formatTime, formatUsd } from '$utils/format';
-	import { createHlWalletAdapter } from '$lib/wallet/hlWalletAdapter';
 	import {
 		cancelOrder as apiCancelOrder,
 		cancelOrders as apiCancelOrders,
@@ -31,15 +30,11 @@
 
 	async function cancelOrder(order: { coin: string; oid: number; cloid?: string }) {
 		actionError = null;
-		const wallet = agentStore.approved && agentStore.signer
-			? agentStore.signer
-			: walletStore.walletClient && walletStore.address
-				? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
-				: null;
-		if (!wallet) {
-			actionError = 'Connect wallet to cancel';
+		if (!agentStore.approved || !agentStore.signer) {
+			agentStore.modalOpen = true;
 			return;
 		}
+		const wallet = agentStore.signer;
 		const asset = marketStore.getAssetId(order.coin);
 		if (asset == null) {
 			actionError = `Unknown asset: ${order.coin}`;
@@ -68,15 +63,11 @@
 	async function cancelAll() {
 		actionError = null;
 		if (!confirm(`Cancel all ${ordersStore.openOrders.length} open orders?`)) return;
-		const wallet = agentStore.approved && agentStore.signer
-			? agentStore.signer
-			: walletStore.walletClient && walletStore.address
-				? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
-				: null;
-		if (!wallet) {
-			actionError = 'Connect wallet to cancel all';
+		if (!agentStore.approved || !agentStore.signer) {
+			agentStore.modalOpen = true;
 			return;
 		}
+		const wallet = agentStore.signer;
 		const cancels: { a: number; o: number }[] = [];
 		for (const order of ordersStore.openOrders) {
 			const asset = marketStore.getAssetId(order.coin);
@@ -120,15 +111,11 @@
 
 	async function submitModify(order: { coin: string; oid: number; side: string; reduceOnly?: boolean; cloid?: string }) {
 		actionError = null;
-		const wallet = agentStore.approved && agentStore.signer
-			? agentStore.signer
-			: walletStore.walletClient && walletStore.address
-				? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
-				: null;
-		if (!wallet) {
-			actionError = 'Connect wallet to modify';
+		if (!agentStore.approved || !agentStore.signer) {
+			agentStore.modalOpen = true;
 			return;
 		}
+		const wallet = agentStore.signer;
 		const asset = marketStore.getAssetId(order.coin);
 		if (asset == null) {
 			actionError = `Unknown asset: ${order.coin}`;

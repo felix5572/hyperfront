@@ -1,12 +1,26 @@
 :8080 {
 	respond /health "OK" 200
 
+	@preflight {
+		method OPTIONS
+		path /exchange
+	}
+	handle @preflight {
+		header Access-Control-Allow-Origin *
+		header Access-Control-Allow-Methods "POST, OPTIONS"
+		header Access-Control-Allow-Headers "Content-Type"
+		respond 204
+	}
+
 	@exchange {
 		method POST
 		path /exchange
 	}
-	reverse_proxy @exchange https://api.hyperliquid.xyz {
-		header_up Host api.hyperliquid.xyz
+	handle @exchange {
+		header Access-Control-Allow-Origin *
+		reverse_proxy https://api.hyperliquid.xyz {
+			header_up Host api.hyperliquid.xyz
+		}
 	}
 
 	respond 404

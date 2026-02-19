@@ -1,94 +1,14 @@
 import { createWalletClient, custom, type WalletClient, type Transport } from 'viem';
 
-// EIP-1193 provider interface (MetaMask, Rabby, etc.)
-interface EIP1193Provider {
-	request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-	on: (event: string, handler: (...args: unknown[]) => void) => void;
-	removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
-}
-
-function getInjectedProvider(): EIP1193Provider | null {
-	if (typeof window === 'undefined') return null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return (window as any).ethereum ?? null;
-}
-
-export type { EIP1193Provider };
-
 export type ConnectResult = {
 	address: `0x${string}`;
-	// No chain constraint: Hyperliquid L1 signing uses chainId 1337 in the EIP-712 domain
-	// (hardcoded by the @nktkas/hyperliquid SDK), which is independent of the wallet's
-	// connected chain. We do not send any on-chain transactions to Arbitrum or HyperEVM.
 	walletClient: WalletClient<Transport>;
 };
 
-// ─── Injected wallet ────────────────────────────────────────────────
-
-// Request wallet connection, returns address
-export async function connectInjectedWallet(): Promise<ConnectResult> {
-	const provider = getInjectedProvider();
-	if (!provider) {
-		throw new Error('No wallet detected. Please install MetaMask or another EIP-1193 wallet.');
-	}
-
-	const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
-	if (!accounts.length) {
-		throw new Error('No accounts returned from wallet.');
-	}
-
-	const address = accounts[0] as `0x${string}`;
-
-	// No chain switch: Hyperliquid L1 signing (signL1Action) always uses chainId 1337
-	// in the EIP-712 domain regardless of which network the wallet is on.
-	const walletClient = createWalletClient({
-		account: address,
-		transport: custom(provider)
-	});
-
-	return { address, walletClient };
-}
-
-// Listen for account/chain changes
-export function onAccountsChanged(
-	callback: (accounts: string[]) => void
-): () => void {
-	const provider = getInjectedProvider();
-	if (!provider) return () => { };
-
-	const handler = (...args: unknown[]) => callback(args[0] as string[]);
-	provider.on('accountsChanged', handler);
-	return () => provider.removeListener('accountsChanged', handler);
-}
-
-export function onChainChanged(callback: (chainId: string) => void): () => void {
-	const provider = getInjectedProvider();
-	if (!provider) return () => { };
-
-	const handler = (...args: unknown[]) => callback(args[0] as string);
-	provider.on('chainChanged', handler);
-	return () => provider.removeListener('chainChanged', handler);
-}
-
-// Check if a wallet is already connected (without prompting)
-export async function getConnectedAccounts(): Promise<string[]> {
-	const provider = getInjectedProvider();
-	if (!provider) return [];
-	const accounts = (await provider.request({ method: 'eth_accounts' })) as string[];
-	return accounts;
-}
-
-// Check if injected wallet is available
-export function hasInjectedWallet(): boolean {
-	return getInjectedProvider() !== null;
-}
-
 // ─── WalletConnect ──────────────────────────────────────────────────
 
-// Replace with your own projectId from https://cloud.walletconnect.com
 const WALLETCONNECT_PROJECT_ID = 'd4deeac57a8cdbe013059f1680b15656';
 
-// Lazy-loaded WalletConnect provider singleton
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let wcProvider: any = null;
 
@@ -99,11 +19,6 @@ async function getOrCreateWCProvider() {
 
 	wcProvider = await EthereumProvider.init({
 		projectId: WALLETCONNECT_PROJECT_ID,
-		// optionalChains: WalletConnect requires at least one chain declared for the session.
-		// Arbitrum (42161) is used here for WalletConnect session compatibility — it is
-		// widely supported by mobile wallets. Marked optional because we do not send
-		// on-chain transactions; all order signing uses chainId 1337 in the EIP-712
-		// domain and goes to the Hyperliquid API directly.
 		optionalChains: [42161],
 		showQrModal: true,
 		methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTypedData_v4'],
@@ -122,8 +37,6 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 	const provider = await getOrCreateWCProvider();
 
 	try {
-		// WalletConnect relay errors surface through event callbacks, not the promise.
-		// Race against a timeout so we don't hang forever if the relay rejects us.
 		await Promise.race([
 			provider.connect(),
 			new Promise<never>((_, reject) =>
@@ -131,7 +44,6 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 			)
 		]);
 	} catch (e) {
-		// Reset singleton so the next attempt gets a fresh provider instance
 		wcProvider = null;
 		throw e;
 	}
@@ -143,12 +55,7 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 	}
 
 	const address = accounts[0] as `0x${string}`;
-
-	const walletClient = createWalletClient({
-		account: address,
-		transport: custom(provider)
-	});
-
+	const walletClient = createWalletClient({ account: address, transport: custom(provider) });
 	return { address, walletClient };
 }
 
@@ -159,40 +66,27 @@ export async function disconnectWalletConnect(): Promise<void> {
 	}
 }
 
-// Reconnect using an existing WalletConnect session (no QR modal).
-// Returns null only if there is no active session — all other failures throw.
 export async function reconnectWalletConnect(): Promise<ConnectResult | null> {
 	const provider = await getOrCreateWCProvider();
-
 	if (!provider.session) return null;
 
 	const accounts: string[] = provider.accounts;
-	if (!accounts.length) {
-		throw new Error('WalletConnect session exists but returned no accounts.');
-	}
+	if (!accounts.length) throw new Error('WalletConnect session exists but returned no accounts.');
 
 	const address = accounts[0] as `0x${string}`;
-
-	const walletClient = createWalletClient({
-		account: address,
-		transport: custom(provider)
-	});
-
+	const walletClient = createWalletClient({ account: address, transport: custom(provider) });
 	return { address, walletClient };
 }
 
-// Listen for WalletConnect events
-export function onWalletConnectAccountsChanged(
-	callback: (accounts: string[]) => void
-): () => void {
-	if (!wcProvider) return () => { };
+export function onWalletConnectAccountsChanged(callback: (accounts: string[]) => void): () => void {
+	if (!wcProvider) return () => {};
 	const handler = (accs: string[]) => callback(accs);
 	wcProvider.on('accountsChanged', handler);
 	return () => wcProvider?.removeListener('accountsChanged', handler);
 }
 
 export function onWalletConnectDisconnect(callback: () => void): () => void {
-	if (!wcProvider) return () => { };
+	if (!wcProvider) return () => {};
 	const handler = () => callback();
 	wcProvider.on('disconnect', handler);
 	return () => wcProvider?.removeListener('disconnect', handler);

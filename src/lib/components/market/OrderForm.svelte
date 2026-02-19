@@ -177,13 +177,12 @@
 			? formatPrice(midNum * (side === 'buy' ? 1.03 : 0.97), szDecimals, isSpot)
 			: priceInput.trim();
 		const priceStr = slippagePrice;
-		const wallet = agentStore.approved && agentStore.signer
-			? agentStore.signer
-			: createHlWalletAdapter(walletStore.walletClient, walletStore.address);
-		if (!wallet) {
-			submitError = 'Wallet not ready';
+		if (!agentStore.approved || !agentStore.signer) {
+			submitError = 'Set up Agent Wallet first';
+			agentStore.modalOpen = true;
 			return;
 		}
+		const wallet = agentStore.signer;
 		submitting = true;
 		try {
 			const result = await apiPlaceOrder(wallet, {

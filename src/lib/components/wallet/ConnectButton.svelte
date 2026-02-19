@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { walletStore, type ConnectMethod } from '$stores/wallet.svelte';
-	import { hasInjectedWallet } from '$lib/wallet/connect';
+	import { walletStore } from '$stores/wallet.svelte';
 	import { truncateAddress } from '$utils/format';
 	import { onMount } from 'svelte';
 
@@ -10,9 +9,6 @@
 	let showConfirm = $state(false);
 	let connecting = $state(false);
 	let connectError = $state<string | null>(null);
-	const hasInjected = $derived(
-		typeof window !== 'undefined' && hasInjectedWallet()
-	);
 
 	onMount(() => {
 		walletStore.tryReconnect();
@@ -20,23 +16,12 @@
 		return cleanup;
 	});
 
-	function handleConnectClick() {
-		connectError = null;
-		showConfirm = true;
-	}
-
-	function handleConfirm() {
-		showConfirm = false;
-		// Auto-pick: use injected wallet if available, otherwise WalletConnect
-		handleConnect(hasInjected ? 'injected' : 'walletconnect');
-	}
-
-	async function handleConnect(method: ConnectMethod) {
+	async function handleConnect() {
 		if (connecting) return;
 		connecting = true;
 		connectError = null;
 		try {
-			await walletStore.connect(method);
+			await walletStore.connect();
 		} catch (e) {
 			console.error('Wallet connection failed:', e);
 			connectError = e instanceof Error ? e.message : String(e);
@@ -48,10 +33,6 @@
 	function handleDisconnect() {
 		walletStore.disconnect();
 		showMenu = false;
-	}
-
-	function closeConfirm() {
-		showConfirm = false;
 	}
 </script>
 
@@ -66,7 +47,6 @@
 		</button>
 
 		{#if showMenu}
-			<!-- full-screen modal -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm" onclick={() => showMenu = false} onkeydown={() => {}}></div>
 			<div class="fixed inset-0 z-[10000] flex items-center justify-center p-4 pointer-events-none">
@@ -97,24 +77,21 @@
 			class={variant === 'large'
 				? 'w-full min-h-[48px] py-4 text-base font-semibold bg-accent text-white rounded-xl border-2 border-accent shadow-md hover:bg-accent/90 hover:shadow-lg active:scale-[0.98] transition-all disabled:opacity-50'
 				: 'px-3 py-1.5 text-xs font-medium bg-accent/20 text-accent rounded-lg border border-accent/30 hover:bg-accent/30 transition-colors disabled:opacity-50'}
-			onclick={handleConnectClick}
+			onclick={() => showConfirm = true}
 			disabled={connecting || walletStore.status === 'connecting'}
 		>
 			{connecting || walletStore.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
 		</button>
 
 		{#if showConfirm}
-			<!-- full-screen modal -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onclick={closeConfirm} onkeydown={() => {}}></div>
+			<div class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onclick={() => showConfirm = false} onkeydown={() => {}}></div>
 			<div class="fixed inset-0 z-[10000] flex items-center justify-center p-4 pointer-events-none">
 				<div class="w-full max-w-sm bg-surface-primary border border-border-primary rounded-2xl shadow-2xl overflow-hidden pointer-events-auto">
-					<!-- Header -->
 					<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
 						<span class="text-sm font-semibold text-text-primary">Connect Wallet</span>
-						<button class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none" onclick={closeConfirm}>✕</button>
+						<button class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none" onclick={() => showConfirm = false}>✕</button>
 					</div>
-					<!-- Disclaimer body -->
 					<div class="px-5 py-4 space-y-3 text-[13px] text-gray-300 leading-relaxed">
 						<div class="flex gap-2.5">
 							<span class="shrink-0 text-gray-500 mt-px">·</span>
@@ -130,7 +107,7 @@
 						</div>
 						<div class="flex gap-2.5">
 							<span class="shrink-0 text-gray-500 mt-px">·</span>
-							<span>Your wallet signature is <span class="text-red-400 font-semibold">only requested when placing or canceling orders</span>.</span>
+							<span>Your wallet signature is <span class="text-red-400 font-semibold">only requested once</span> to set up the agent wallet.</span>
 						</div>
 						<p class="pt-1 text-gray-500 text-xs">
 							Just want to view charts or positions? Enter any wallet address in the search field — no connection needed.
@@ -139,9 +116,9 @@
 					<div class="px-5 pb-5">
 						<button
 							class="w-full py-3 text-sm font-semibold bg-accent text-white rounded-xl hover:bg-accent/90 active:scale-[0.98] transition-all"
-							onclick={handleConfirm}
+							onclick={() => { showConfirm = false; handleConnect(); }}
 						>
-							Confirm and Connect
+							Connect with WalletConnect
 						</button>
 					</div>
 				</div>
