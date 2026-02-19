@@ -98,6 +98,7 @@ async function getOrCreateWCProvider() {
 		projectId: WALLETCONNECT_PROJECT_ID,
 		chains: [42161], // Arbitrum
 		showQrModal: true,
+		methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData', 'eth_signTypedData_v4'],
 		metadata: {
 			name: 'Hyperfront',
 			description: 'Hyperfront Trading',
