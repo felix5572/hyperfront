@@ -2,6 +2,7 @@
 	import { ordersStore } from '$stores/orders.svelte';
 	import { marketStore } from '$stores/market.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
+	import { agentStore } from '$stores/agent.svelte';
 	import { formatPrice, formatSize, formatTime, formatUsd } from '$utils/format';
 	import { createHlWalletAdapter } from '$lib/wallet/hlWalletAdapter';
 	import {
@@ -30,9 +31,11 @@
 
 	async function cancelOrder(order: { coin: string; oid: number; cloid?: string }) {
 		actionError = null;
-		const wallet = walletStore.walletClient && walletStore.address
-			? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
-			: null;
+		const wallet = agentStore.approved && agentStore.signer
+			? agentStore.signer
+			: walletStore.walletClient && walletStore.address
+				? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
+				: null;
 		if (!wallet) {
 			actionError = 'Connect wallet to cancel';
 			return;
@@ -65,9 +68,11 @@
 	async function cancelAll() {
 		actionError = null;
 		if (!confirm(`Cancel all ${ordersStore.openOrders.length} open orders?`)) return;
-		const wallet = walletStore.walletClient && walletStore.address
-			? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
-			: null;
+		const wallet = agentStore.approved && agentStore.signer
+			? agentStore.signer
+			: walletStore.walletClient && walletStore.address
+				? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
+				: null;
 		if (!wallet) {
 			actionError = 'Connect wallet to cancel all';
 			return;
@@ -115,9 +120,11 @@
 
 	async function submitModify(order: { coin: string; oid: number; side: string; reduceOnly?: boolean; cloid?: string }) {
 		actionError = null;
-		const wallet = walletStore.walletClient && walletStore.address
-			? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
-			: null;
+		const wallet = agentStore.approved && agentStore.signer
+			? agentStore.signer
+			: walletStore.walletClient && walletStore.address
+				? createHlWalletAdapter(walletStore.walletClient, walletStore.address)
+				: null;
 		if (!wallet) {
 			actionError = 'Connect wallet to modify';
 			return;

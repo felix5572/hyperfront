@@ -2,6 +2,7 @@
 	import { marketStore } from '$stores/market.svelte';
 	import { accountStore } from '$stores/account.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
+	import { agentStore } from '$stores/agent.svelte';
 	import { formatPrice, formatSize, formatUsd, tickSize } from '$utils/format';
 	import { createHlWalletAdapter } from '$lib/wallet/hlWalletAdapter';
 	import { placeOrder as apiPlaceOrder } from '$lib/api/exchange';
@@ -176,7 +177,9 @@
 			? formatPrice(midNum * (side === 'buy' ? 1.03 : 0.97), szDecimals, isSpot)
 			: priceInput.trim();
 		const priceStr = slippagePrice;
-		const wallet = createHlWalletAdapter(walletStore.walletClient, walletStore.address);
+		const wallet = agentStore.approved && agentStore.signer
+			? agentStore.signer
+			: createHlWalletAdapter(walletStore.walletClient, walletStore.address);
 		if (!wallet) {
 			submitError = 'Wallet not ready';
 			return;

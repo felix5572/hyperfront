@@ -1,5 +1,6 @@
-import { signL1Action } from '@nktkas/hyperliquid/signing';
+import { signL1Action, signUserSignedAction } from '@nktkas/hyperliquid/signing';
 import type { AbstractWallet } from '@nktkas/hyperliquid/signing';
+import { ApproveAgentTypes } from '@nktkas/hyperliquid/api/exchange';
 import { getExchangeBaseUrl } from '$lib/utils/constants';
 
 export { getExchangeBaseUrl };
@@ -273,4 +274,33 @@ export async function updateIsolatedMargin(
 	};
 	const out = await postExchange(wallet, action, opts);
 	return { type: out.response?.type };
+}
+
+export async function approveAgentWallet(
+	masterWallet: AbstractWallet,
+	agentAddress: HexAddress
+): Promise<void> {
+	const nonce = Date.now();
+	const action = {
+		type: 'approveAgent' as const,
+		signatureChainId: '0xa4b1' as const,
+		hyperliquidChain: 'Mainnet' as const,
+		agentAddress,
+		agentName: 'hyper-front.xyz',
+		nonce
+	};
+	const signature = await signUserSignedAction({
+		wallet: masterWallet,
+		action,
+		types: ApproveAgentTypes
+	});
+	const res = await fetch(`${getExchangeBaseUrl()}${EXCHANGE_PATH}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ action, nonce, signature })
+	});
+	const text = await res.text();
+	if (!res.ok) throw new Error(`approveAgent failed: ${res.status} - ${text}`);
+	const data = JSON.parse(text);
+	if (data.status !== 'ok') throw new Error(`approveAgent returned non-ok: ${text}`);
 }

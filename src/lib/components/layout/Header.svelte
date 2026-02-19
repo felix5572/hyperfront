@@ -1,5 +1,7 @@
 <script lang="ts">
 	import ConnectButton from '$components/wallet/ConnectButton.svelte';
+	import AgentKeyButton from '$components/wallet/AgentKeyButton.svelte';
+	import { walletStore } from '$stores/wallet.svelte';
 </script>
 
 <header class="flex items-center justify-between px-4 h-12 bg-surface-secondary/95 border-b border-border-secondary shrink-0 backdrop-blur-sm">
@@ -10,5 +12,10 @@
 			<span class="text-[9px] px-1 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">Beta</span>
 		</div>
 	</div>
-	<ConnectButton />
+	<div class="flex items-center gap-2">
+		{#if walletStore.isConnected}
+			<AgentKeyButton />
+		{/if}
+		<ConnectButton />
+	</div>
 </header>
