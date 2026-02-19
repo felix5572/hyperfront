@@ -56,7 +56,7 @@
 </script>
 
 {#if walletStore.isConnected && walletStore.address}
-	<div class="relative">
+	<div>
 		<button
 			class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-surface-tertiary rounded-lg border border-border-primary hover:border-accent transition-colors"
 			onclick={() => showMenu = !showMenu}
@@ -66,16 +66,28 @@
 		</button>
 
 		{#if showMenu}
-			<!-- backdrop -->
+			<!-- full-screen modal -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="fixed inset-0 z-40" onclick={() => showMenu = false} onkeydown={() => {}}></div>
-			<div class="absolute right-0 top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl p-1 min-w-[140px]">
-				<button
-					class="w-full text-left px-3 py-2 text-xs text-short hover:bg-surface-hover rounded transition-colors"
-					onclick={handleDisconnect}
-				>
-					Disconnect
-				</button>
+			<div class="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm" onclick={() => showMenu = false} onkeydown={() => {}}></div>
+			<div class="fixed inset-0 z-[10000] flex items-center justify-center p-4 pointer-events-none">
+				<div class="w-full max-w-sm bg-surface-primary border border-border-primary rounded-2xl shadow-2xl overflow-hidden pointer-events-auto">
+					<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
+						<span class="text-sm font-semibold text-text-primary">Wallet</span>
+						<button class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none" onclick={() => showMenu = false}>✕</button>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-xs text-gray-500 mb-1">Connected address</p>
+						<p class="text-sm font-mono text-text-primary break-all">{walletStore.address}</p>
+					</div>
+					<div class="px-5 pb-5">
+						<button
+							class="w-full py-3 text-sm font-semibold text-short bg-surface-tertiary hover:bg-surface-hover rounded-xl border border-border-primary transition-colors"
+							onclick={handleDisconnect}
+						>
+							Disconnect
+						</button>
+					</div>
+				</div>
 			</div>
 		{/if}
 	</div>
