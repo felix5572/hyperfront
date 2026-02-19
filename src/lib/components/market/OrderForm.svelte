@@ -96,6 +96,20 @@
 		priceInput = formatPrice(next, szDecimals, isSpot);
 	}
 
+	function syncSliderFromInput() {
+		const val = parseFloat(sizeInput.trim());
+		if (!Number.isFinite(val) || val <= 0) {
+			allocationPct = 0;
+			return;
+		}
+		const balance = sizeAsset === 'base' ? baseBalance : quoteBalance;
+		if (!Number.isFinite(balance) || balance <= 0) {
+			allocationPct = 0;
+			return;
+		}
+		allocationPct = Math.min(100, Math.round((val / balance) * 100));
+	}
+
 	function applyAllocation(pct: number) {
 		submitError = null;
 		if (allocationSliderDisabled) {
@@ -313,6 +327,7 @@
 			bind:value={sizeInput}
 			placeholder="0.00"
 			aria-label="Amount"
+			oninput={syncSliderFromInput}
 			class="w-full px-2 py-1.5 bg-surface-tertiary border border-border-primary rounded text-xs text-right tabular-nums font-mono focus:outline-none focus:border-accent"
 		/>
 		<p class="mt-1 text-[10px] text-gray-500">
