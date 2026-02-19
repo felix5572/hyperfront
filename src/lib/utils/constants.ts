@@ -2,13 +2,11 @@ export const API_URL = 'https://api.hyperliquid.xyz';
 export const WS_URL = 'wss://api.hyperliquid.xyz/ws';
 export const INFO_URL = `${API_URL}/info`;
 
-/** Exchange base URL (configurable for proxy). Defaults to API_URL. */
+/** Exchange base URL: proxy server for geo-restricted regions. */
 export function getExchangeBaseUrl(): string {
-	const url = typeof import.meta !== 'undefined' && import.meta.env?.VITE_EXCHANGE_URL;
-	return (typeof url === 'string' && url.trim() !== '' ? url.trim() : API_URL).replace(/\/$/, '');
+	return 'https://api.hyper-front.xyz';
 }
 
-export const EXCHANGE_URL = `${API_URL}/exchange`;
 
 // Arbitrum chain ID (used for Hyperliquid wallet signing)
 export const ARBITRUM_CHAIN_ID = 42161;

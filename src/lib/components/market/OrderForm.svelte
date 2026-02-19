@@ -56,10 +56,9 @@
 			: 0
 	);
 	const allocationSliderDisabled = $derived(
-		!Number.isFinite(stablecoinBalance) ||
-		stablecoinBalance < 1 ||
-		!Number.isFinite(baseHoldingValueAtMid) ||
-		baseHoldingValueAtMid < 1
+		sizeAsset === 'base'
+			? (!Number.isFinite(baseBalance) || baseBalance <= 0)
+			: (!Number.isFinite(quoteBalance) || quoteBalance <= 0)
 	);
 	const activePriceStr = $derived(
 		orderType === 'limit' ? priceInput.trim() : (midPx ?? '')
@@ -145,16 +144,24 @@
 			return;
 		}
 		const sizeStr = formatSize(baseSize, Math.max(0, szDecimals));
-		const priceStr = orderType === 'limit' ? priceInput.trim() : (midPx ?? '');
-		const priceNum = parseFloat(priceStr);
-		if (orderType === 'limit' && (isNaN(priceNum) || priceNum <= 0)) {
-			submitError = 'Enter a valid price';
-			return;
+		const midNum = parseFloat(midPx ?? '');
+		if (orderType === 'limit') {
+			const priceNum = parseFloat(priceInput.trim());
+			if (isNaN(priceNum) || priceNum <= 0) {
+				submitError = 'Enter a valid price';
+				return;
+			}
+		} else {
+			if (!midPx || !Number.isFinite(midNum) || midNum <= 0) {
+				submitError = 'Mid price not available for market order';
+				return;
+			}
 		}
-		if (orderType === 'market' && (!priceStr || isNaN(priceNum) || priceNum <= 0)) {
-			submitError = 'Mid price not available for market order';
-			return;
-		}
+		// Market order: use mid ± 3% slippage as worst-acceptable price
+		const slippagePrice = orderType === 'market'
+			? formatPrice(midNum * (side === 'buy' ? 1.03 : 0.97), szDecimals, isSpot)
+			: priceInput.trim();
+		const priceStr = slippagePrice;
 		const wallet = createHlWalletAdapter(walletStore.walletClient, walletStore.address);
 		if (!wallet) {
 			submitError = 'Wallet not ready';
