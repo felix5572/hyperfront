@@ -3,6 +3,7 @@
 	import Header from '$components/layout/Header.svelte';
 	import BottomNav from '$components/layout/BottomNav.svelte';
 	import WalletDisclaimer from '$components/wallet/WalletDisclaimer.svelte';
+	import AgentKeyModal from '$components/wallet/AgentKeyModal.svelte';
 
 	let { children } = $props();
 </script>
@@ -20,3 +21,4 @@
 </div>
 
 <WalletDisclaimer />
+<AgentKeyModal />

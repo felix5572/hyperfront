@@ -2,6 +2,7 @@ import { PrivateKeySigner } from '@nktkas/hyperliquid/signing';
 
 let privateKey = $state<`0x${string}` | null>(null);
 let approved = $state(false);
+let modalOpen = $state(false);
 
 const signer = $derived(privateKey ? new PrivateKeySigner(privateKey) : null);
 const address = $derived(signer ? (signer.address as `0x${string}`) : null);
@@ -32,6 +33,12 @@ export const agentStore = {
 	},
 	get approved() {
 		return approved;
+	},
+	get modalOpen() {
+		return modalOpen;
+	},
+	set modalOpen(v: boolean) {
+		modalOpen = v;
 	},
 	generateKey,
 	markApproved,
