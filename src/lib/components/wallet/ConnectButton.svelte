@@ -100,17 +100,21 @@
 			<!-- backdrop -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="fixed inset-0 z-40" onclick={closePicker} onkeydown={() => {}}></div>
-			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl p-1 min-w-[200px]">
+			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl min-w-[220px]">
+				<p class="px-3 pt-2.5 pb-1.5 text-[11px] text-gray-500 leading-snug border-b border-border-secondary">
+					Connecting grants read &amp; trade access.<br>
+					To view only, enter an address below instead.
+				</p>
 				{#if hasInjected}
 					<button
-						class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover rounded transition-colors"
+						class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover transition-colors"
 						onclick={() => handleConnect('injected')}
 					>
 						Browser Wallet
 					</button>
 				{/if}
 				<button
-					class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover rounded transition-colors"
+					class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover rounded-b-lg transition-colors"
 					onclick={() => handleConnect('walletconnect')}
 				>
 					WalletConnect
