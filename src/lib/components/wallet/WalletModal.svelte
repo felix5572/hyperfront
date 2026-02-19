@@ -52,12 +52,12 @@
 			{#if walletStore.isConnected && walletStore.address}
 				<!-- Connected: show address + via label + disconnect -->
 				<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
-					<span class="text-sm font-semibold text-text-primary">Wallet</span>
-					<button class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none" onclick={close}>✕</button>
+					<span class="text-sm font-semibold text-gray-900">Wallet</span>
+					<button class="text-gray-400 hover:text-gray-700 transition-colors text-lg leading-none" onclick={close}>✕</button>
 				</div>
 				<div class="px-5 py-4">
 					<p class="text-xs text-gray-500 mb-1">Connected address</p>
-					<p class="text-sm font-mono text-text-primary break-all">{walletStore.address}</p>
+					<p class="text-sm font-mono text-gray-900 break-all">{walletStore.address}</p>
 					<p class="text-xs text-gray-500 mt-2">via {viaLabel}</p>
 				</div>
 				<div class="px-5 pb-5">
