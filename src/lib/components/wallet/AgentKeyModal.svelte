@@ -64,14 +64,11 @@
 			agentStore.markApproved();
 		} catch (e) {
 			agentStore.clear();
-			console.error('[AgentKeyModal] setup failed:', e);
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			loading = false;
 		}
 	}
-
-
 </script>
 
 {#if agentStore.modalOpen}
@@ -89,29 +86,29 @@
 			aria-label="Agent Wallet"
 		>
 			<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
-				<span class="text-sm font-semibold text-text-primary">Agent Wallet</span>
+				<span class="text-sm font-semibold text-gray-900">Agent Wallet</span>
 				<button
-					class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none"
+					class="text-gray-400 hover:text-gray-700 transition-colors text-lg leading-none"
 					onclick={close}
 				>✕</button>
 			</div>
 
-			<div class="px-5 py-4 space-y-3 text-[13px] text-gray-100 leading-relaxed">
+			<div class="px-5 py-4 space-y-3 text-[13px] text-gray-700 leading-relaxed">
 				{#if agentStore.approved && agentStore.address}
-					<div class="flex items-center gap-2 text-sm text-green-400">
+					<div class="flex items-center gap-2 text-sm text-green-600 font-semibold">
 						<span>✓</span>
-						<span class="font-semibold">Agent wallet active</span>
+						<span>Agent wallet active</span>
 					</div>
-					<p class="text-xs text-gray-400 font-mono">
+					<p class="text-xs text-gray-500 font-mono">
 						{agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
 					</p>
-					<p>Orders are signed locally. The key lives in memory only and disappears on refresh.</p>
+					<p class="text-gray-600">Orders are signed locally. The key lives in memory only and disappears on refresh.</p>
 				{:else}
-					<p>Required to place and cancel orders on Hyperfront.</p>
+					<p class="text-gray-700">Required to place and cancel orders on Hyperfront.</p>
 					<div class="space-y-1.5">
 						<div class="flex gap-2">
 							<span class="text-gray-400 shrink-0">·</span>
-							<span>Can only <span class="text-white font-semibold">place and cancel orders</span> — cannot withdraw or transfer funds</span>
+							<span>Can only <span class="text-gray-900 font-semibold">place and cancel orders</span> — cannot withdraw or transfer funds</span>
 						</div>
 						<div class="flex gap-2">
 							<span class="text-gray-400 shrink-0">·</span>
@@ -123,10 +120,9 @@
 						</div>
 					</div>
 					{#if error}
-						<div class="rounded-lg bg-red-950/60 border border-red-700 p-3 space-y-1">
-							<p class="text-xs font-semibold text-red-400">Setup failed</p>
-							<p class="text-xs text-red-300 break-all">{error}</p>
-							<p class="text-[11px] text-red-500">See browser console for full details.</p>
+						<div class="rounded-lg bg-red-50 border border-red-200 p-3 space-y-1">
+							<p class="text-xs font-semibold text-red-700">Setup failed</p>
+							<p class="text-xs text-red-600 break-all">{error}</p>
 						</div>
 					{/if}
 				{/if}
