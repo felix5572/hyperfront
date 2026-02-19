@@ -98,22 +98,32 @@
 				>✕</button>
 			</div>
 
-			<div class="px-5 py-4 space-y-3">
+			<div class="px-5 py-4 space-y-3 text-[13px] text-gray-300 leading-relaxed">
 				{#if agentStore.approved && agentStore.address}
 					<div class="flex items-center gap-2 text-sm text-green-500">
 						<span>✓</span>
-						<span>Signing key active</span>
+						<span class="font-semibold">Agent wallet active</span>
 					</div>
 					<p class="text-xs text-gray-500 font-mono">
-						Agent: {agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
+						{agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
 					</p>
-					<p class="text-[13px] text-gray-300 leading-relaxed">
-						Orders sign locally — no MetaMask pop-ups. Key lives in memory only and disappears on refresh.
-					</p>
+					<p>下单和撤单将由 agent 钱包本地签名，无需 MetaMask 弹窗。key 仅保存在内存中，刷新后消失。</p>
 				{:else}
-					<p class="text-[13px] text-gray-300 leading-relaxed">
-						Generates a temporary local key and approves it on Arbitrum, so orders sign without MetaMask pop-ups. The key cannot withdraw funds.
-					</p>
+					<p>需要 agent 钱包才能在 Hyperfront 下单和撤单。</p>
+					<div class="space-y-1.5">
+						<div class="flex gap-2">
+							<span class="text-gray-500 shrink-0">·</span>
+							<span>agent 钱包<span class="text-white font-medium">只有下单、撤单权限</span>，无法提款或转账</span>
+						</div>
+						<div class="flex gap-2">
+							<span class="text-gray-500 shrink-0">·</span>
+							<span>key 仅存于内存，刷新页面后消失</span>
+						</div>
+						<div class="flex gap-2">
+							<span class="text-gray-500 shrink-0">·</span>
+							<span>已有 agent 列表：<a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline">app.hyperliquid.xyz/API</a></span>
+						</div>
+					</div>
 					{#if error}
 						<p class="text-xs text-red-400" role="alert">{error}</p>
 					{/if}
