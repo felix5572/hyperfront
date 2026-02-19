@@ -1,6 +1,8 @@
 # Hyperfront
 
-An unofficial, open-source mobile-first frontend for Hyperliquid.
+An unofficial, open-source **mobile-first** frontend for Hyperliquid, optimized for phone use.
+
+🌐 **https://hyper-front.xyz**
 
 ---
 
@@ -8,7 +10,7 @@ An unofficial, open-source mobile-first frontend for Hyperliquid.
 
 It's 3am. You're not at your desk. Your phone buzzes — the market just moved hard.
 
-You open your laptop, wait for it to boot, set up the Internet, log into the exchange... by the time you're ready, the move is already half over. Or worse, you needed to cut a position and you couldn't.
+You reach for your laptop — if it's even with you. Wait for it to boot, set up the Internet, log into the exchange... by the time you're ready, the move is already half over. Or worse, you needed to cut a position and you couldn't.
 
 Hyperfront is built for that moment. Install it to your home screen and you're one tap away from entering or exiting a position — no desktop, no waiting.
 
@@ -21,12 +23,10 @@ It's not trying to replace the official interface. It's the thing you reach for 
 **Read this before using.**
 
 - **Unofficial.** Hyperfront has no affiliation with Hyperliquid. It is not created, endorsed, or maintained by the Hyperliquid team. When in doubt, use the official interface.
-- **Buggy.** This is an early-stage open-source project. There are bugs. Data may be wrong. Orders may behave unexpectedly. Do not rely on it as your only tool.
+- **Buggy.** This is an early-stage open-source project. There are bugs. Data may be wrong. Orders may behave unexpectedly. Do not rely on it as your only tool. (PRs welcome)
 - **Not financial advice.** Nothing shown here constitutes investment advice. You are fully responsible for your own trades and losses.
 - **Your keys stay yours.** Hyperfront never asks for your private key or seed phrase. It never will. Order signing happens in your wallet — you approve every action.
 - **Verify before you sign.** Only approve wallet prompts you understand. Use an agent wallet with limited permissions and small balances when possible.
-
-If you find bugs or want to improve something — PRs are welcome.
 
 ---
 
@@ -50,7 +50,7 @@ This project is made available "as is", without warranty of any kind, express or
 
 - No private keys are ever sent to any server
 - Signing is handled entirely by your connected wallet (MetaMask, WalletConnect, etc.)
-- Once signed, orders are transmitted as-is directly to Hyperliquid — the payload is not modified in transit
+- Once signed, orders are transmitted as-is directly (via a simple proxy) to Hyperliquid — the payload is not modified in transit
 - Prefer using a [Hyperliquid agent wallet](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/api-trading) with limited permissions for mobile usage
 
 The lightweight order-forwarding service lives in `proxy/` (Caddy).
