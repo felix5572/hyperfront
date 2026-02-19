@@ -7,6 +7,7 @@
 	let { variant = 'default' }: { variant?: 'default' | 'large' } = $props();
 
 	let showMenu = $state(false);
+	let showConfirm = $state(false);
 	let showWalletPicker = $state(false);
 	let connecting = $state(false);
 	let connectError = $state<string | null>(null);
@@ -25,13 +26,16 @@
 
 	function handleConnectClick() {
 		connectError = null;
+		showConfirm = true;
+	}
 
+	function handleConfirm() {
+		showConfirm = false;
 		// Mobile without injected wallet: go straight to WalletConnect
 		if (isMobile && !hasInjected) {
 			handleConnect('walletconnect');
 			return;
 		}
-
 		showWalletPicker = true;
 	}
 
@@ -57,6 +61,10 @@
 
 	function closePicker() {
 		showWalletPicker = false;
+	}
+
+	function closeConfirm() {
+		showConfirm = false;
 	}
 </script>
 
@@ -96,18 +104,38 @@
 			{connecting || walletStore.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
 		</button>
 
+		{#if showConfirm}
+			<!-- backdrop -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="fixed inset-0 z-40" onclick={closeConfirm} onkeydown={() => {}}></div>
+			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-xl shadow-xl w-72 p-4">
+				<p class="text-xs font-semibold text-text-primary mb-2">Connect Wallet</p>
+				<ul class="text-[11px] text-gray-500 leading-relaxed space-y-1.5 mb-3">
+					<li>Unofficial &amp; open-source — no affiliation with Hyperliquid. <span class="text-gray-600">PRs welcome.</span></li>
+					<li>Early stage and buggy — data may be inaccurate. Not financial advice.</li>
+					<li>We never ask for your private key or seed phrase.</li>
+					<li>Your wallet signature is only requested when placing or canceling orders.</li>
+				</ul>
+				<p class="text-[11px] text-gray-600 leading-relaxed mb-3">
+					Just want to view? Enter any address in the input field — no connection needed.
+				</p>
+				<button
+					class="w-full py-2 text-xs font-semibold bg-accent text-white rounded-lg hover:bg-accent/90 active:scale-[0.98] transition-all"
+					onclick={handleConfirm}
+				>
+					Confirm and Connect
+				</button>
+			</div>
+		{/if}
+
 		{#if showWalletPicker}
 			<!-- backdrop -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="fixed inset-0 z-40" onclick={closePicker} onkeydown={() => {}}></div>
-			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl min-w-[220px]">
-				<p class="px-3 pt-2.5 pb-1.5 text-[11px] text-gray-500 leading-snug border-b border-border-secondary">
-					Connecting grants read &amp; trade access.<br>
-					To view only, enter an address below instead.
-				</p>
+			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 bg-surface-tertiary border border-border-primary rounded-lg shadow-xl min-w-[200px]">
 				{#if hasInjected}
 					<button
-						class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover transition-colors"
+						class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover rounded-t-lg transition-colors"
 						onclick={() => handleConnect('injected')}
 					>
 						Browser Wallet
