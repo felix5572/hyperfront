@@ -1,29 +1,61 @@
 # Hyperfront
 
-Unofficial mobile-first frontend for Hyperliquid, built for emergency monitoring and lightweight trading when desktop is unavailable.
+An unofficial, open-source mobile-first frontend for Hyperliquid.
 
-## Disclaimer
+---
 
-- Hyperfront is an unofficial community frontend related to the Hyperliquid ecosystem and is **not created, maintained, or endorsed by the official Hyperliquid development team**.
-- This project is provided "as is" without warranties of any kind.
-- Use at your own risk. You are fully responsible for all actions, transactions, and losses.
-- This project is not investment, legal, or tax advice.
-- No custody: Hyperfront does not store private keys or seed phrases on a backend.
-- Wallet operations are signature-based; only approve actions you understand.
+## Why This Exists
 
-## What It Supports
+It's 3am. You're not at your desk. Your phone buzzes — the market just moved hard.
 
-- Market watch for Perp, Spot, and HIP-3 assets
-- Order placement and order management on mobile
-- Open orders, fills, and history views
-- Basic account info page (subaccounts, referral, fees, abstraction)
-- PWA install support for mobile home screen usage
+You open your laptop, wait for it to boot, set up the Internet, log into the exchange... by the time you're ready, the move is already half over. Or worse, you needed to cut a position and you couldn't.
+
+Hyperfront is built for that moment. Install it to your home screen and you're one tap away from entering or exiting a position — no desktop, no waiting.
+
+It's not trying to replace the official interface. It's the thing you reach for when every second counts.
+
+---
+
+## ⚠️ Disclaimer
+
+**Read this before using.**
+
+- **Unofficial.** Hyperfront has no affiliation with Hyperliquid. It is not created, endorsed, or maintained by the Hyperliquid team. When in doubt, use the official interface.
+- **Buggy.** This is an early-stage open-source project. There are bugs. Data may be wrong. Orders may behave unexpectedly. Do not rely on it as your only tool.
+- **Not financial advice.** Nothing shown here constitutes investment advice. You are fully responsible for your own trades and losses.
+- **Your keys stay yours.** Hyperfront never asks for your private key or seed phrase. It never will. Order signing happens in your wallet — you approve every action.
+- **Verify before you sign.** Only approve wallet prompts you understand. Use an agent wallet with limited permissions and small balances when possible.
+
+If you find bugs or want to improve something — PRs are welcome.
+
+---
+
+This project is made available "as is", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or noninfringement. Use at your own risk. It is intended for educational or illustrative purposes only and may be incomplete, insecure, or incompatible with future systems.
+
+---
+
+## Features
+
+- Perp, Spot, and HIP-3 market overview
+- Place and cancel orders on mobile
+- Open orders, fills, and order history
+- Portfolio view: perp account value, spot balances with USD estimates
+- Account info: subaccounts, referral, fee tiers, abstraction
+- WalletConnect support (scan QR or deep-link from mobile wallet)
+- PWA: install to home screen for one-tap access
+
+---
 
 ## Security Model
 
-- Hyperfront does not ask for your private key or seed phrase in normal operation.
-- Wallet interaction is done via wallet authorization/signature when needed (for example, place/cancel orders).
-- Prefer using an agent wallet with limited permissions and small balances on mobile.
+- No private keys are ever sent to any server
+- Signing is handled entirely by your connected wallet (MetaMask, WalletConnect, etc.)
+- Once signed, orders are transmitted as-is directly to Hyperliquid — the payload is not modified in transit
+- Prefer using a [Hyperliquid agent wallet](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/api-trading) with limited permissions for mobile usage
+
+The lightweight order-forwarding service lives in `proxy/` (Caddy).
+
+---
 
 ## Local Development
 
@@ -39,68 +71,9 @@ npm run build
 npm run preview
 ```
 
-## Deploy (DigitalOcean Recommended)
+## PWA Notes
 
-### Option A: App Platform (Static Site)
+- Android/Chrome: install prompt appears automatically
+- iOS Safari: tap Share → Add to Home Screen
 
-- Runtime: Static Site
-- Build command: `npm ci && npm run build`
-- Output directory: `build`
-- Root directory: `/` (this repository root)
-- Enable auto-deploy from your Git branch
-
-If using DigitalOcean App Platform from GitHub directly, this repo is already a standalone frontend repo.
-
-### Option B: Droplet + Nginx
-
-Build locally or in CI, then upload `build/` to server (for example `/var/www/hyperfront`) and use an SPA fallback:
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    root /var/www/hyperfront;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Security headers
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-    add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.hyperliquid.xyz wss://api.hyperliquid.xyz; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:;" always;
-}
-```
-
-Then terminate TLS with Let's Encrypt (Certbot) or Caddy.
-
-## CI/CD (GitHub Actions)
-
-- `CI`: runs on push/PR (`npm ci`, `npm run check`, `npm run build`)
-- Deployment is currently handled manually in DigitalOcean App Platform UI.
-
-## Production Checklist
-
-- Verify current network endpoint is production mainnet before trading
-- Confirm disclaimer is visible in `Info`
-- Confirm websocket error visibility in UI (no silent failure)
-- Fix/verify PWA icon dimensions in manifest (`192x192`, `512x512`)
-- Keep dependencies updated and pin lockfile in CI
-
-### PWA icon note
-
-Current `static/icons/icon-192.png` and `static/icons/icon-512.png` are placeholder-sized and should be regenerated to actual dimensions before production.
-
-## PWA Install Notes
-
-- Android/Chromium browsers: install prompt is usually available.
-- iOS Safari: install is usually manual via `Share -> Add to Home Screen`.
-
-## Security Notes
-
-- Prefer using an agent wallet with limited permissions.
-- Keep balances small for operational/mobile usage.
-- Verify domain and TLS before wallet interactions.
+Icons in `static/icons/` are placeholder-sized and should be replaced before production.
