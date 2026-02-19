@@ -31,30 +31,30 @@
 					<line x1="12" y1="9" x2="12" y2="13"/>
 					<line x1="12" y1="17" x2="12.01" y2="17"/>
 				</svg>
-				<span class="text-sm font-bold text-yellow-400 tracking-wide uppercase">使用前须知</span>
+				<span class="text-sm font-bold text-yellow-400 tracking-wide uppercase">Before You Continue</span>
 			</div>
 
 			<!-- Body -->
 			<div class="px-4 py-4 space-y-3 text-sm">
 				<div class="flex gap-2.5">
 					<span class="text-yellow-400 font-bold shrink-0">①</span>
-					<span><span class="font-semibold text-text-primary">非官方 · 开源</span><span class="text-gray-400"> — 与 Hyperliquid 官方无关，代码公开，欢迎 PR。</span></span>
+					<span><span class="font-semibold text-text-primary">Unofficial & open-source</span><span class="text-gray-400"> — No affiliation with Hyperliquid. Use the official interface when in doubt.</span></span>
 				</div>
 				<div class="flex gap-2.5">
 					<span class="text-yellow-400 font-bold shrink-0">②</span>
-					<span><span class="font-semibold text-text-primary">测试阶段</span><span class="text-gray-400"> — 必定存在 Bug，数据可能有误，以官方界面为准。</span></span>
+					<span><span class="font-semibold text-text-primary">Early stage, expect bugs</span><span class="text-gray-400"> — Data may be wrong. Always verify with the official interface.</span></span>
 				</div>
 				<div class="flex gap-2.5">
 					<span class="text-yellow-400 font-bold shrink-0">③</span>
-					<span><span class="font-semibold text-text-primary">非投资建议</span><span class="text-gray-400"> — 不对任何信息误导负责，盈亏自负。</span></span>
+					<span><span class="font-semibold text-text-primary">Not financial advice</span><span class="text-gray-400"> — You are fully responsible for your trades and losses.</span></span>
 				</div>
 				<div class="flex gap-2.5">
 					<span class="text-long font-bold shrink-0">④</span>
-					<span><span class="font-semibold text-text-primary">不索取私钥</span><span class="text-gray-400"> — 本工具永远不会要求私钥，仅下单时需要钱包签名。</span></span>
+					<span><span class="font-semibold text-text-primary">Your keys stay yours</span><span class="text-gray-400"> — We never ask for your private key. Only your wallet signature is needed when placing orders.</span></span>
 				</div>
 				<div class="flex gap-2.5">
 					<span class="text-gray-400 font-bold shrink-0">⑤</span>
-					<span class="text-gray-400">定位为看盘 / 行情突变时的备用入场工具，不替代官方界面。</span>
+					<span class="text-gray-400">Built as a lightweight fallback for monitoring and quick entries — not a replacement for the official interface.</span>
 				</div>
 			</div>
 
@@ -64,7 +64,7 @@
 					class="w-full py-2.5 text-sm font-semibold bg-yellow-500 hover:bg-yellow-400 text-black rounded-xl transition-colors active:scale-[0.98]"
 					onclick={accept}
 				>
-					我已知晓，继续使用
+					I understand, continue
 				</button>
 			</div>
 		</div>
