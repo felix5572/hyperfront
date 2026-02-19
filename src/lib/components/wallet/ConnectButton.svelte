@@ -91,7 +91,7 @@
 			{connecting || walletStore.status === 'connecting' ? 'Connecting...' : 'Connect Wallet'}
 		</button>
 
-		{#if showConfirm || showWalletPicker}
+		{#if showConfirm}
 			<!-- full-screen modal -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onclick={closeConfirm} onkeydown={() => {}}></div>
@@ -102,60 +102,36 @@
 						<span class="text-sm font-semibold text-text-primary">Connect Wallet</span>
 						<button class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none" onclick={closeConfirm}>✕</button>
 					</div>
-
-					{#if showConfirm}
-						<!-- Disclaimer body -->
-						<div class="px-5 py-4 space-y-2.5 text-[12px] text-gray-400 leading-relaxed">
-							<div class="flex gap-2">
-								<span class="shrink-0 text-gray-500">·</span>
-								<span><span class="text-text-primary font-medium">Unofficial &amp; open-source</span> — no affiliation with Hyperliquid. PRs welcome.</span>
-							</div>
-							<div class="flex gap-2">
-								<span class="shrink-0 text-gray-500">·</span>
-								<span><span class="text-text-primary font-medium">Early stage, expect bugs</span> — data may be inaccurate. Not financial advice.</span>
-							</div>
-							<div class="flex gap-2">
-								<span class="shrink-0 text-gray-500">·</span>
-								<span><span class="text-text-primary font-medium">We never ask for your private key</span> or seed phrase.</span>
-							</div>
-							<div class="flex gap-2">
-								<span class="shrink-0 text-gray-500">·</span>
-								<span>Your wallet signature is <span class="text-text-primary font-medium">only requested when placing or canceling orders</span>.</span>
-							</div>
-							<p class="pt-1 text-gray-500 text-[11px]">
-								Just want to view charts or positions? Enter any wallet address in the search field — no connection needed.
-							</p>
+					<!-- Disclaimer body -->
+					<div class="px-5 py-4 space-y-2.5 text-[12px] text-gray-400 leading-relaxed">
+						<div class="flex gap-2">
+							<span class="shrink-0 text-gray-500">·</span>
+							<span><span class="text-text-primary font-medium">Unofficial &amp; open-source</span> — no affiliation with Hyperliquid. PRs welcome.</span>
 						</div>
-						<div class="px-5 pb-5">
-							<button
-								class="w-full py-3 text-sm font-semibold bg-accent text-white rounded-xl hover:bg-accent/90 active:scale-[0.98] transition-all"
-								onclick={handleConfirm}
-							>
-								Confirm and Connect
-							</button>
+						<div class="flex gap-2">
+							<span class="shrink-0 text-gray-500">·</span>
+							<span><span class="text-text-primary font-medium">Early stage, expect bugs</span> — data may be inaccurate. Not financial advice.</span>
 						</div>
-					{:else if showWalletPicker}
-						<!-- Wallet picker body -->
-						<div class="px-5 py-4 space-y-2">
-							{#if hasInjected}
-								<button
-									class="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-text-primary bg-surface-tertiary hover:bg-surface-hover rounded-xl border border-border-primary transition-colors"
-									onclick={() => handleConnect('injected')}
-								>
-									<span class="text-base">🦊</span>
-									<span>Browser Wallet</span>
-								</button>
-							{/if}
-							<button
-								class="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-text-primary bg-surface-tertiary hover:bg-surface-hover rounded-xl border border-border-primary transition-colors"
-								onclick={() => handleConnect('walletconnect')}
-							>
-								<span class="text-base">🔗</span>
-								<span>WalletConnect</span>
-							</button>
+						<div class="flex gap-2">
+							<span class="shrink-0 text-gray-500">·</span>
+							<span><span class="text-text-primary font-medium">We never ask for your private key</span> or seed phrase.</span>
 						</div>
-						<div class="pb-4"></div>
-					{/if}
+						<div class="flex gap-2">
+							<span class="shrink-0 text-gray-500">·</span>
+							<span>Your wallet signature is <span class="text-text-primary font-medium">only requested when placing or canceling orders</span>.</span>
+						</div>
+						<p class="pt-1 text-gray-500 text-[11px]">
+							Just want to view charts or positions? Enter any wallet address in the search field — no connection needed.
+						</p>
+					</div>
+					<div class="px-5 pb-5">
+						<button
+							class="w-full py-3 text-sm font-semibold bg-accent text-white rounded-xl hover:bg-accent/90 active:scale-[0.98] transition-all"
+							onclick={handleConfirm}
+						>
+							Confirm and Connect
+						</button>
+					</div>
 				</div>
 			</div>
 		{/if}
@@ -163,9 +139,6 @@
 		{#if connectError}
 			<div class="absolute {variant === 'large' ? 'left-0' : 'right-0'} top-full mt-1 z-50 w-64 p-2 rounded-lg border border-red-300 bg-red-50 text-red-700 text-[11px] leading-snug shadow-lg">
 				<p>{connectError}</p>
-				{#if isMobile && !hasInjected}
-					<p class="mt-1">Tip: use WalletConnect to connect your mobile wallet.</p>
-				{/if}
 			</div>
 		{/if}
 	</div>
