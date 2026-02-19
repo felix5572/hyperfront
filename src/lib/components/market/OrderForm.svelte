@@ -3,6 +3,7 @@
 	import { accountStore } from '$stores/account.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { agentStore } from '$stores/agent.svelte';
+	import { feedbackStore } from '$stores/feedback.svelte';
 	import { formatPrice, formatSize, formatUsd, tickSize } from '$utils/format';
 	import { createHlWalletAdapter } from '$lib/wallet/hlWalletAdapter';
 	import { placeOrder as apiPlaceOrder } from '$lib/api/exchange';
@@ -196,12 +197,12 @@
 			});
 			const first = result.statuses[0];
 			if (first && typeof first === 'object' && 'error' in first) {
-				submitError = (first as { error: string }).error;
+				feedbackStore.error('Order Failed', (first as { error: string }).error);
 				return;
 			}
-			submitError = null;
+			feedbackStore.success(`${isBuy ? 'Buy' : 'Sell'} ${coin} order placed`);
 		} catch (e) {
-			submitError = e instanceof Error ? e.message : String(e);
+			feedbackStore.error('Order Failed', e instanceof Error ? e.message : String(e));
 			throw e;
 		} finally {
 			submitting = false;

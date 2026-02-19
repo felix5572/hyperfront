@@ -3,6 +3,7 @@
 	import { marketStore } from '$stores/market.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { agentStore } from '$stores/agent.svelte';
+	import { feedbackStore } from '$stores/feedback.svelte';
 	import { formatPrice, formatSize, formatTime, formatUsd } from '$utils/format';
 	import {
 		cancelOrder as apiCancelOrder,
@@ -21,15 +22,12 @@
 	let editSize = $state('');
 	let editTif = $state<Tif>('Gtc');
 	let lastModifyTif = $state<Tif>('Gtc');
-	let actionError = $state<string | null>(null);
-
 	async function refreshOpenOrders() {
 		const user = ordersStore.viewAddress ?? walletStore.address;
 		if (user) await ordersStore.fetchOpenOrders(user);
 	}
 
 	async function cancelOrder(order: { coin: string; oid: number; cloid?: string }) {
-		actionError = null;
 		if (!agentStore.approved || !agentStore.signer) {
 			agentStore.modalOpen = true;
 			return;
@@ -37,7 +35,7 @@
 		const wallet = agentStore.signer;
 		const asset = marketStore.getAssetId(order.coin);
 		if (asset == null) {
-			actionError = `Unknown asset: ${order.coin}`;
+			feedbackStore.error('Cancel Failed', `Unknown asset: ${order.coin}`);
 			return;
 		}
 		cancellingOid = order.oid;
@@ -47,13 +45,13 @@
 				: await apiCancelOrder(wallet, asset, order.oid);
 			const first = result.statuses[0];
 			if (first && typeof first === 'object' && 'error' in first) {
-				actionError = (first as { error: string }).error;
+				feedbackStore.error('Cancel Failed', (first as { error: string }).error);
 			} else {
-				actionError = null;
+				feedbackStore.success('Order cancelled');
 				await refreshOpenOrders();
 			}
 		} catch (e) {
-			actionError = e instanceof Error ? e.message : String(e);
+			feedbackStore.error('Cancel Failed', e instanceof Error ? e.message : String(e));
 			throw e;
 		} finally {
 			cancellingOid = null;
@@ -61,7 +59,6 @@
 	}
 
 	async function cancelAll() {
-		actionError = null;
 		if (!confirm(`Cancel all ${ordersStore.openOrders.length} open orders?`)) return;
 		if (!agentStore.approved || !agentStore.signer) {
 			agentStore.modalOpen = true;
@@ -75,21 +72,22 @@
 			cancels.push({ a: asset, o: order.oid });
 		}
 		if (cancels.length === 0) {
-			actionError = 'No cancellable orders';
+			feedbackStore.error('Cancel Failed', 'No cancellable orders');
 			return;
 		}
+		const n = cancels.length;
 		cancellingAll = true;
 		try {
 			const result = await apiCancelOrders(wallet, cancels);
 			const firstError = result.statuses.find((s) => typeof s === 'object' && 'error' in s) as { error: string } | undefined;
 			if (firstError) {
-				actionError = firstError.error;
+				feedbackStore.error('Cancel Failed', firstError.error);
 			} else {
-				actionError = null;
+				feedbackStore.success(`${n} orders cancelled`);
 			}
 			await refreshOpenOrders();
 		} catch (e) {
-			actionError = e instanceof Error ? e.message : String(e);
+			feedbackStore.error('Cancel Failed', e instanceof Error ? e.message : String(e));
 			throw e;
 		} finally {
 			cancellingAll = false;
@@ -101,7 +99,6 @@
 		editPrice = order.limitPx;
 		editSize = order.sz;
 		editTif = lastModifyTif;
-		actionError = null;
 	}
 
 	function cancelEdit() {
@@ -110,7 +107,6 @@
 	}
 
 	async function submitModify(order: { coin: string; oid: number; side: string; reduceOnly?: boolean; cloid?: string }) {
-		actionError = null;
 		if (!agentStore.approved || !agentStore.signer) {
 			agentStore.modalOpen = true;
 			return;
@@ -118,13 +114,13 @@
 		const wallet = agentStore.signer;
 		const asset = marketStore.getAssetId(order.coin);
 		if (asset == null) {
-			actionError = `Unknown asset: ${order.coin}`;
+			feedbackStore.error('Modify Failed', `Unknown asset: ${order.coin}`);
 			return;
 		}
 		const px = editPrice.trim();
 		const sz = editSize.trim();
 		if (!px || !sz || Number(px) <= 0 || Number(sz) <= 0) {
-			actionError = 'Invalid price or size';
+			feedbackStore.error('Modify Failed', 'Invalid price or size');
 			return;
 		}
 		modifyingOid = order.oid;
@@ -143,15 +139,15 @@
 			});
 			const first = result.statuses[0];
 			if (first && typeof first === 'object' && 'error' in first) {
-				actionError = (first as { error: string }).error;
+				feedbackStore.error('Modify Failed', (first as { error: string }).error);
 				return;
 			}
 			lastModifyTif = editTif;
-			actionError = null;
 			editingOrder = null;
+			feedbackStore.success('Order modified');
 			await refreshOpenOrders();
 		} catch (e) {
-			actionError = e instanceof Error ? e.message : String(e);
+			feedbackStore.error('Modify Failed', e instanceof Error ? e.message : String(e));
 			throw e;
 		} finally {
 			modifyingOid = null;
@@ -169,9 +165,6 @@
 			{cancellingAll ? 'Cancelling…' : 'Cancel All'}
 		</button>
 	</div>
-	{#if actionError}
-		<p class="text-xs text-red-600 px-3 py-1" role="alert">{actionError}</p>
-	{/if}
 	{#if ordersStore.openOrders.length === 0}
 		<div class="text-center py-8 text-sm text-gray-500">No open orders</div>
 	{:else}

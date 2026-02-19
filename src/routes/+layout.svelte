@@ -5,6 +5,8 @@
 	import WalletDisclaimer from '$components/wallet/WalletDisclaimer.svelte';
 	import AgentKeyModal from '$components/wallet/AgentKeyModal.svelte';
 	import WalletModal from '$components/wallet/WalletModal.svelte';
+	import SuccessToast from '$components/common/SuccessToast.svelte';
+	import ErrorModal from '$components/common/ErrorModal.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { agentStore } from '$stores/agent.svelte';
 
@@ -32,3 +34,5 @@
 <WalletDisclaimer />
 <WalletModal />
 <AgentKeyModal />
+<SuccessToast />
+<ErrorModal />
