@@ -75,78 +75,73 @@
 
 <!-- Header button -->
 <button
-	class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border transition-colors {agentStore.approved
-		? 'border-green-400 text-green-600 bg-green-50 hover:bg-green-100'
-		: 'border-orange-400 text-orange-600 bg-orange-50 hover:bg-orange-100'}"
+	class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border border-border-primary text-gray-600 bg-surface-tertiary hover:bg-surface-hover transition-colors"
 	onclick={() => {
 		isOpen = true;
 		error = null;
 	}}
-	title="Signing key"
+	title="Agent Wallet"
 >
 	<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 		<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
 	</svg>
-	{agentStore.approved ? 'Key ✓' : 'Key ⚠'}
+	Agent Wallet
 </button>
 
 <!-- Modal -->
 {#if isOpen}
-	<button
-		type="button"
-		class="fixed inset-0 z-40 bg-black/35"
-		aria-label="Close signing key dialog"
-		onclick={() => {
-			isOpen = false;
-			error = null;
-		}}
-	></button>
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm"
+		onclick={() => { isOpen = false; error = null; }}
+		onkeydown={() => {}}
+	></div>
+	<div class="fixed inset-0 z-[10000] flex items-center justify-center p-4 pointer-events-none">
 		<div
-			class="w-full max-w-sm rounded-xl border border-border-primary bg-surface-secondary shadow-xl"
+			class="w-full max-w-sm bg-surface-primary border border-border-primary rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
 			role="dialog"
 			aria-modal="true"
-			aria-label="Signing Key"
+			aria-label="Agent Wallet"
 		>
-			<div class="flex items-center justify-between px-4 py-3 border-b border-border-secondary">
-				<h3 class="text-sm font-semibold">Signing Key</h3>
+			<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
+				<span class="text-sm font-semibold text-text-primary">Agent Wallet</span>
 				<button
-					class="text-xs text-gray-500 hover:text-gray-700"
-					onclick={() => {
-						isOpen = false;
-						error = null;
-					}}
+					class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none"
+					onclick={() => { isOpen = false; error = null; }}
 				>✕</button>
 			</div>
 
-			<div class="p-4 space-y-3">
+			<div class="px-5 py-4 space-y-3">
 				{#if agentStore.approved && agentStore.address}
-					<div class="flex items-center gap-2 text-sm text-green-600">
-						<span class="text-base">✓</span>
+					<div class="flex items-center gap-2 text-sm text-green-500">
+						<span>✓</span>
 						<span>Signing key active</span>
 					</div>
 					<p class="text-xs text-gray-500 font-mono">
 						Agent: {agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
 					</p>
-					<p class="text-[11px] text-gray-400">
-						Orders will be signed locally without MetaMask pop-ups. The key exists only in memory and disappears on refresh.
+					<p class="text-[13px] text-gray-300 leading-relaxed">
+						Orders sign locally — no MetaMask pop-ups. Key lives in memory only and disappears on refresh.
 					</p>
+				{:else}
+					<p class="text-[13px] text-gray-300 leading-relaxed">
+						Generates a temporary local key and approves it on Arbitrum, so orders sign without MetaMask pop-ups. The key cannot withdraw funds.
+					</p>
+					{#if error}
+						<p class="text-xs text-red-400" role="alert">{error}</p>
+					{/if}
+				{/if}
+			</div>
+
+			<div class="px-5 pb-5 space-y-2">
+				{#if agentStore.approved}
 					<button
-						class="w-full py-2 rounded border border-red-300 text-red-600 text-xs font-medium hover:bg-red-50"
+						class="w-full py-3 text-sm font-semibold text-short bg-surface-tertiary hover:bg-surface-hover rounded-xl border border-border-primary transition-colors"
 						onclick={revoke}
 					>Revoke</button>
 				{:else}
-					<p class="text-xs text-gray-600">
-						Required for placing &amp; canceling orders without MetaMask pop-ups.
-					</p>
-					<p class="text-[11px] text-gray-400">
-						A temporary signing key is generated locally and approved on Arbitrum. It cannot withdraw funds.
-					</p>
-					{#if error}
-						<p class="text-xs text-red-600" role="alert">{error}</p>
-					{/if}
 					<button
-						class="w-full py-2 rounded bg-accent text-white text-xs font-semibold hover:bg-accent/90 disabled:opacity-50"
+						class="w-full py-3 text-sm font-semibold bg-accent text-white rounded-xl hover:bg-accent/90 active:scale-[0.98] transition-all disabled:opacity-50"
 						disabled={loading}
 						onclick={setup}
 					>
