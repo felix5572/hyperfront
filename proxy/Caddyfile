@@ -1,5 +1,5 @@
 :8080 {
-	respond /health 200
+	respond /health "OK" 200
 
 	@exchange {
 		method POST
