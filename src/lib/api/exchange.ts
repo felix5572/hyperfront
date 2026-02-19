@@ -281,12 +281,13 @@ export async function approveAgentWallet(
 	agentAddress: HexAddress
 ): Promise<void> {
 	const nonce = Date.now();
+	const expiresAt = nonce + 24 * 60 * 60 * 1000; // 24 h
 	const action = {
 		type: 'approveAgent' as const,
 		signatureChainId: '0xa4b1' as const,
 		hyperliquidChain: 'Mainnet' as const,
 		agentAddress,
-		agentName: 'hyper-front.xyz',
+		agentName: `hyper-front.xyz valid_until ${expiresAt}`,
 		nonce
 	};
 	const signature = await signUserSignedAction({

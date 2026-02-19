@@ -4,8 +4,16 @@
 	import BottomNav from '$components/layout/BottomNav.svelte';
 	import WalletDisclaimer from '$components/wallet/WalletDisclaimer.svelte';
 	import AgentKeyModal from '$components/wallet/AgentKeyModal.svelte';
+	import { walletStore } from '$stores/wallet.svelte';
+	import { agentStore } from '$stores/agent.svelte';
 
 	let { children } = $props();
+
+	$effect(() => {
+		if (!walletStore.isConnected) {
+			agentStore.clear();
+		}
+	});
 </script>
 
 <svelte:head>

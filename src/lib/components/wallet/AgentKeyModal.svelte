@@ -70,10 +70,7 @@
 		}
 	}
 
-	function revoke() {
-		agentStore.clear();
-		error = null;
-	}
+
 </script>
 
 {#if agentStore.modalOpen}
@@ -107,21 +104,21 @@
 					<p class="text-xs text-gray-500 font-mono">
 						{agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
 					</p>
-					<p>下单和撤单将由 agent 钱包本地签名，无需 MetaMask 弹窗。key 仅保存在内存中，刷新后消失。</p>
+					<p>Orders are signed locally — no MetaMask pop-ups. The key lives in memory only and disappears on refresh.</p>
 				{:else}
-					<p>需要 agent 钱包才能在 Hyperfront 下单和撤单。</p>
+					<p>Required to place and cancel orders on Hyperfront.</p>
 					<div class="space-y-1.5">
 						<div class="flex gap-2">
 							<span class="text-gray-500 shrink-0">·</span>
-							<span>agent 钱包<span class="text-white font-medium">只有下单、撤单权限</span>，无法提款或转账</span>
+							<span>Can only <span class="text-white font-medium">place and cancel orders</span> — cannot withdraw or transfer funds</span>
 						</div>
 						<div class="flex gap-2">
 							<span class="text-gray-500 shrink-0">·</span>
-							<span>key 仅存于内存，刷新页面后消失</span>
+							<span>Key exists in memory only, gone on refresh</span>
 						</div>
 						<div class="flex gap-2">
 							<span class="text-gray-500 shrink-0">·</span>
-							<span>已有 agent 列表：<a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline">app.hyperliquid.xyz/API</a></span>
+							<span>Manage existing agents: <a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline">app.hyperliquid.xyz/API</a></span>
 						</div>
 					</div>
 					{#if error}
@@ -130,13 +127,8 @@
 				{/if}
 			</div>
 
-			<div class="px-5 pb-5">
-				{#if agentStore.approved}
-					<button
-						class="w-full py-3 text-sm font-semibold text-short bg-surface-tertiary hover:bg-surface-hover rounded-xl border border-border-primary transition-colors"
-						onclick={revoke}
-					>Revoke</button>
-				{:else}
+			{#if !agentStore.approved}
+				<div class="px-5 pb-5">
 					<button
 						class="w-full py-3 text-sm font-semibold bg-accent text-white rounded-xl hover:bg-accent/90 active:scale-[0.98] transition-all disabled:opacity-50"
 						disabled={loading}
@@ -144,8 +136,8 @@
 					>
 						{loading ? 'Setting up…' : 'Set up signing key'}
 					</button>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
