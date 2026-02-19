@@ -115,24 +115,24 @@
 						<button class="text-gray-500 hover:text-text-primary transition-colors text-lg leading-none" onclick={closeConfirm}>✕</button>
 					</div>
 					<!-- Disclaimer body -->
-					<div class="px-5 py-4 space-y-2.5 text-[12px] text-gray-400 leading-relaxed">
-						<div class="flex gap-2">
-							<span class="shrink-0 text-gray-500">·</span>
-							<span><span class="text-text-primary font-medium">Unofficial &amp; open-source</span> — no affiliation with Hyperliquid. PRs welcome.</span>
+					<div class="px-5 py-4 space-y-3 text-[13px] text-gray-300 leading-relaxed">
+						<div class="flex gap-2.5">
+							<span class="shrink-0 text-gray-500 mt-px">·</span>
+							<span><span class="text-red-400 font-semibold">Unofficial &amp; open-source</span> — no affiliation with Hyperliquid. PRs welcome.</span>
 						</div>
-						<div class="flex gap-2">
-							<span class="shrink-0 text-gray-500">·</span>
-							<span><span class="text-text-primary font-medium">Early stage, expect bugs</span> — data may be inaccurate. Not financial advice.</span>
+						<div class="flex gap-2.5">
+							<span class="shrink-0 text-gray-500 mt-px">·</span>
+							<span><span class="text-red-400 font-semibold">Early stage, expect bugs</span> — data may be inaccurate. <span class="text-red-400 font-semibold">Not financial advice.</span></span>
 						</div>
-						<div class="flex gap-2">
-							<span class="shrink-0 text-gray-500">·</span>
-							<span><span class="text-text-primary font-medium">We never ask for your private key</span> or seed phrase.</span>
+						<div class="flex gap-2.5">
+							<span class="shrink-0 text-gray-500 mt-px">·</span>
+							<span>We <span class="text-red-400 font-semibold">never ask for your private key</span> or seed phrase.</span>
 						</div>
-						<div class="flex gap-2">
-							<span class="shrink-0 text-gray-500">·</span>
-							<span>Your wallet signature is <span class="text-text-primary font-medium">only requested when placing or canceling orders</span>.</span>
+						<div class="flex gap-2.5">
+							<span class="shrink-0 text-gray-500 mt-px">·</span>
+							<span>Your wallet signature is <span class="text-red-400 font-semibold">only requested when placing or canceling orders</span>.</span>
 						</div>
-						<p class="pt-1 text-gray-500 text-[11px]">
+						<p class="pt-1 text-gray-500 text-xs">
 							Just want to view charts or positions? Enter any wallet address in the search field — no connection needed.
 						</p>
 					</div>

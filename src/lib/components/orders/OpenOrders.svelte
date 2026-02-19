@@ -249,7 +249,7 @@
 						<button
 							class="w-6 h-6 inline-flex items-center justify-center rounded border border-border-primary text-gray-700 hover:bg-surface-hover disabled:opacity-50"
 							title="Modify order"
-							disabled={cancellingOid === order.oid || modifyingOid === order.oid}
+							disabled={!walletStore.isConnected || cancellingOid === order.oid || modifyingOid === order.oid}
 							onclick={() => beginEdit(order)}
 						>
 							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
