@@ -4,6 +4,7 @@
 	import BottomNav from '$components/layout/BottomNav.svelte';
 	import WalletDisclaimer from '$components/wallet/WalletDisclaimer.svelte';
 	import AgentKeyModal from '$components/wallet/AgentKeyModal.svelte';
+	import WalletModal from '$components/wallet/WalletModal.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { agentStore } from '$stores/agent.svelte';
 
@@ -29,4 +30,5 @@
 </div>
 
 <WalletDisclaimer />
+<WalletModal />
 <AgentKeyModal />

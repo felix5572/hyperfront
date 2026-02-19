@@ -34,7 +34,7 @@ async function getOrCreateWCProvider() {
 }
 
 export async function connectWalletConnect(): Promise<ConnectResult> {
-	const provider = await getOrCreateWCProvider();
+	let provider = await getOrCreateWCProvider();
 
 	try {
 		await Promise.race([
@@ -44,8 +44,21 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 			)
 		]);
 	} catch (e) {
-		wcProvider = null;
-		throw e;
+		// "Connection request reset" means stale pending session — reset and retry once
+		const msg = e instanceof Error ? e.message : String(e);
+		if (msg.includes('reset') || msg.includes('rejected')) {
+			wcProvider = null;
+			provider = await getOrCreateWCProvider();
+			await Promise.race([
+				provider.connect(),
+				new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error('WalletConnect connection timed out (60 s)')), 60_000)
+				)
+			]);
+		} else {
+			wcProvider = null;
+			throw e;
+		}
 	}
 
 	const accounts: string[] = provider.accounts;

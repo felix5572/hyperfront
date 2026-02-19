@@ -64,6 +64,7 @@
 			agentStore.markApproved();
 		} catch (e) {
 			agentStore.clear();
+			console.error('[AgentKeyModal] setup failed:', e);
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
 			loading = false;
@@ -95,34 +96,38 @@
 				>✕</button>
 			</div>
 
-			<div class="px-5 py-4 space-y-3 text-[13px] text-gray-300 leading-relaxed">
+			<div class="px-5 py-4 space-y-3 text-[13px] text-gray-100 leading-relaxed">
 				{#if agentStore.approved && agentStore.address}
-					<div class="flex items-center gap-2 text-sm text-green-500">
+					<div class="flex items-center gap-2 text-sm text-green-400">
 						<span>✓</span>
 						<span class="font-semibold">Agent wallet active</span>
 					</div>
-					<p class="text-xs text-gray-500 font-mono">
+					<p class="text-xs text-gray-400 font-mono">
 						{agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
 					</p>
-					<p>Orders are signed locally — no MetaMask pop-ups. The key lives in memory only and disappears on refresh.</p>
+					<p>Orders are signed locally. The key lives in memory only and disappears on refresh.</p>
 				{:else}
 					<p>Required to place and cancel orders on Hyperfront.</p>
 					<div class="space-y-1.5">
 						<div class="flex gap-2">
-							<span class="text-gray-500 shrink-0">·</span>
-							<span>Can only <span class="text-white font-medium">place and cancel orders</span> — cannot withdraw or transfer funds</span>
+							<span class="text-gray-400 shrink-0">·</span>
+							<span>Can only <span class="text-white font-semibold">place and cancel orders</span> — cannot withdraw or transfer funds</span>
 						</div>
 						<div class="flex gap-2">
-							<span class="text-gray-500 shrink-0">·</span>
+							<span class="text-gray-400 shrink-0">·</span>
 							<span>Key exists in memory only, gone on refresh</span>
 						</div>
 						<div class="flex gap-2">
-							<span class="text-gray-500 shrink-0">·</span>
+							<span class="text-gray-400 shrink-0">·</span>
 							<span>Manage existing agents: <a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline">app.hyperliquid.xyz/API</a></span>
 						</div>
 					</div>
 					{#if error}
-						<p class="text-xs text-red-400" role="alert">{error}</p>
+						<div class="rounded-lg bg-red-950/60 border border-red-700 p-3 space-y-1">
+							<p class="text-xs font-semibold text-red-400">Setup failed</p>
+							<p class="text-xs text-red-300 break-all">{error}</p>
+							<p class="text-[11px] text-red-500">See browser console for full details.</p>
+						</div>
 					{/if}
 				{/if}
 			</div>

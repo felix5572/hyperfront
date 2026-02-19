@@ -13,6 +13,7 @@ let address = $state<`0x${string}` | null>(null);
 let status = $state<ConnectionStatus>('disconnected');
 let walletClient = $state<WalletClient<Transport> | null>(null);
 let error = $state<string | null>(null);
+let modalOpen = $state(false);
 
 let connectLock = false;
 
@@ -77,6 +78,8 @@ export const walletStore = {
 	get walletClient() { return walletClient; },
 	get error() { return error; },
 	get isConnected() { return isConnected; },
+	get modalOpen() { return modalOpen; },
+	set modalOpen(v: boolean) { modalOpen = v; },
 	connect,
 	disconnect,
 	tryReconnect,
