@@ -20,6 +20,10 @@
 		header Access-Control-Allow-Origin *
 		reverse_proxy https://api.hyperliquid.xyz {
 			header_up Host api.hyperliquid.xyz
+			# Strip upstream CORS headers to prevent duplicate Access-Control-Allow-Origin: *,*
+			header_down -Access-Control-Allow-Origin
+			header_down -Access-Control-Allow-Methods
+			header_down -Access-Control-Allow-Headers
 		}
 	}
 
