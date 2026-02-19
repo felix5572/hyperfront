@@ -29,6 +29,19 @@
 	let accountLoadedFor = $state<`0x${string}` | null>(null);
 	let lastCoin = $state('');
 
+	type ConfirmDetails = {
+		side: 'buy' | 'sell';
+		orderType: 'market' | 'limit';
+		priceStr: string;
+		sizeStr: string;
+		midPxSnapshot: string;
+		estimatedValue: number | null;
+		tif?: Tif;
+		asset: number;
+	};
+	let showConfirm = $state(false);
+	let pendingOrder = $state<ConfirmDetails | null>(null);
+
 	const isBuy = $derived(side === 'buy');
 	const midPx = $derived(marketStore.midPrice);
 	const spotAsset = $derived(isSpot ? marketStore.findSpotAsset(coin) : undefined);
@@ -85,6 +98,20 @@
 					: null
 			: null
 	);
+
+	// Current position info (perp mode only)
+	const currentPosition = $derived(
+		!isSpot ? accountStore.positions.find(p => p.coin === coin) ?? null : null
+	);
+	const positionSzi = $derived(currentPosition ? parseFloat(currentPosition.szi) : 0);
+	const positionDirection = $derived<'long' | 'short' | null>(
+		positionSzi > 0 ? 'long' : positionSzi < 0 ? 'short' : null
+	);
+	const positionSize = $derived(Math.abs(positionSzi));
+
+	// Button label helpers
+	const buyLabel = $derived(isSpot ? 'Buy' : 'Buy / Long');
+	const sellLabel = $derived(isSpot ? 'Sell' : 'Sell / Short');
 
 	function setMidPrice() {
 		if (midPx) priceInput = formatPrice(midPx, szDecimals, isSpot);
@@ -143,7 +170,8 @@
 		sizeInput = formatSize(quoteBalance * (pct / 100), 4);
 	}
 
-	async function submitOrder() {
+	// Validate and show confirmation modal
+	function submitOrder() {
 		submitError = null;
 		if (!walletStore.isConnected || !walletStore.walletClient || !walletStore.address) {
 			submitError = 'Connect wallet first';
@@ -173,40 +201,68 @@
 				return;
 			}
 		}
-		// Market order: use mid ± 3% slippage as worst-acceptable price
-		const slippagePrice = orderType === 'market'
-			? formatPrice(midNum * (side === 'buy' ? 1.03 : 0.97), szDecimals, isSpot)
-			: priceInput.trim();
-		const priceStr = slippagePrice;
 		if (!agentStore.approved || !agentStore.signer) {
 			submitError = 'Set up Agent Wallet first';
 			agentStore.modalOpen = true;
 			return;
 		}
+		// Market order: use mid ± 3% slippage as worst-acceptable price
+		const slippagePrice = orderType === 'market'
+			? formatPrice(midNum * (side === 'buy' ? 1.03 : 0.97), szDecimals, isSpot)
+			: priceInput.trim();
+
+		// Snapshot mid price at validation time
+		const midPxSnapshot = midPx ?? '';
+
+		pendingOrder = {
+			side,
+			orderType,
+			priceStr: slippagePrice,
+			sizeStr,
+			midPxSnapshot,
+			estimatedValue: estimatedQuoteValue,
+			tif: orderType === 'limit' ? tif : undefined,
+			asset
+		};
+		showConfirm = true;
+	}
+
+	// Actually execute the order after confirmation
+	async function executeOrder() {
+		if (!pendingOrder || !agentStore.signer) return;
 		const wallet = agentStore.signer;
 		submitting = true;
 		try {
 			const result = await apiPlaceOrder(wallet, {
-				asset,
-				side,
-				orderType,
-				price: priceStr,
-				size: sizeStr,
+				asset: pendingOrder.asset,
+				side: pendingOrder.side,
+				orderType: pendingOrder.orderType,
+				price: pendingOrder.priceStr,
+				size: pendingOrder.sizeStr,
 				reduceOnly,
-				tif: orderType === 'limit' ? tif : undefined
+				tif: pendingOrder.tif
 			});
 			const first = result.statuses[0];
 			if (first && typeof first === 'object' && 'error' in first) {
 				feedbackStore.error('Order Failed', (first as { error: string }).error);
+				closeConfirm();
 				return;
 			}
-			feedbackStore.success(`${isBuy ? 'Buy' : 'Sell'} ${coin} order placed`);
+			feedbackStore.success(`${pendingOrder.side === 'buy' ? 'Buy' : 'Sell'} ${coin} order placed`);
+			closeConfirm();
 		} catch (e) {
 			feedbackStore.error('Order Failed', e instanceof Error ? e.message : String(e));
+			closeConfirm();
 			throw e;
 		} finally {
 			submitting = false;
 		}
+	}
+
+	function closeConfirm() {
+		showConfirm = false;
+		// Delay clearing pendingOrder to avoid flash during close animation
+		setTimeout(() => { pendingOrder = null; }, 150);
 	}
 
 	$effect(() => {
@@ -248,11 +304,11 @@
 		<button
 			class="flex-1 py-2 text-xs font-semibold transition-colors {isBuy ? 'bg-long text-white' : 'bg-surface-tertiary text-gray-400'}"
 			onclick={() => side = 'buy'}
-		>Buy</button>
+		>{buyLabel}</button>
 		<button
 			class="flex-1 py-2 text-xs font-semibold transition-colors {!isBuy ? 'bg-short text-white' : 'bg-surface-tertiary text-gray-400'}"
 			onclick={() => side = 'sell'}
-		>Sell</button>
+		>{sellLabel}</button>
 	</div>
 
 	<!-- Order type -->
@@ -318,9 +374,24 @@
 				>{quoteAssetName}</button>
 			</div>
 		</div>
+
+		<!-- Current position indicator (perp only) -->
+		{#if !isSpot}
+			<div class="mb-1 px-2 py-1 rounded border border-border-secondary bg-surface-tertiary/40 text-[10px] font-medium
+				{positionDirection === 'long' ? 'text-long' : positionDirection === 'short' ? 'text-short' : 'text-gray-500'}">
+				{#if positionDirection === 'long'}
+					▲ Long &nbsp;{formatSize(positionSize, Math.max(0, szDecimals))} {coin}
+				{:else if positionDirection === 'short'}
+					▼ Short &nbsp;{formatSize(positionSize, Math.max(0, szDecimals))} {coin}
+				{:else}
+					— No position
+				{/if}
+			</div>
+		{/if}
+
 		<div class="mb-1 p-1.5 rounded border border-border-secondary bg-surface-tertiary/40 text-[10px] text-gray-500 space-y-0.5">
 			<div>{baseAssetName}: {formatSize(baseBalance, Math.max(0, szDecimals))}</div>
-			<div>{quoteAssetName}: {formatSize(quoteBalance, 4)}</div>
+			<div>{quoteAssetName}{isSpot ? '' : ' (margin)'}: {formatSize(quoteBalance, 4)}</div>
 			{#if quoteAssetName !== 'USDC'}
 				<div>USDC: {formatSize(usdcBalance, 4)}</div>
 			{/if}
@@ -428,10 +499,132 @@
 		{:else if submitting}
 			Submitting…
 		{:else}
-			{isBuy ? 'Buy' : 'Sell'} {coin}
+			{isBuy ? buyLabel : sellLabel} {coin}
 		{/if}
 	</button>
 </div>
+
+<!-- Confirm Order Modal -->
+{#if showConfirm && pendingOrder}
+	<!-- Backdrop -->
+	<button
+		type="button"
+		class="fixed inset-0 z-50 bg-black/60 cursor-default"
+		aria-label="Close confirm dialog"
+		onclick={closeConfirm}
+	></button>
+
+	<!-- Modal card -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="confirm-modal-title"
+	>
+		<div class="pointer-events-auto w-full max-w-xs mx-4 rounded-xl border border-border-primary bg-surface-secondary shadow-2xl">
+			<!-- Header -->
+			<div class="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+				<span id="confirm-modal-title" class="text-sm font-semibold text-gray-200">Confirm Order</span>
+				<button
+					type="button"
+					class="text-gray-500 hover:text-gray-300 text-lg leading-none"
+					aria-label="Close"
+					onclick={closeConfirm}
+				>✕</button>
+			</div>
+
+			<!-- Body -->
+			<div class="px-4 py-3 space-y-2 text-xs">
+				<!-- Side -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Side</span>
+					<span class="font-semibold {pendingOrder.side === 'buy' ? 'text-long' : 'text-short'}">
+						{pendingOrder.side === 'buy' ? buyLabel : sellLabel}
+					</span>
+				</div>
+				<!-- Asset -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Asset</span>
+					<span class="font-medium text-gray-200">{coin}</span>
+				</div>
+				<!-- Order Type -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Order Type</span>
+					<span class="font-medium text-gray-200 capitalize">{pendingOrder.orderType}</span>
+				</div>
+				<!-- Price -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Price</span>
+					<span class="font-medium text-gray-200">
+						{#if pendingOrder.orderType === 'market'}
+							Market (±3% slippage)
+						{:else}
+							{formatUsd(parseFloat(pendingOrder.priceStr))}
+						{/if}
+					</span>
+				</div>
+				<!-- Mid Price snapshot -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Mid Price</span>
+					<span class="font-medium text-gray-200">
+						{pendingOrder.midPxSnapshot ? formatUsd(parseFloat(pendingOrder.midPxSnapshot)) : '—'}
+					</span>
+				</div>
+				<!-- Size -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Size</span>
+					<span class="font-medium text-gray-200">{pendingOrder.sizeStr} {coin}</span>
+				</div>
+				<!-- Estimated Value -->
+				<div class="flex justify-between">
+					<span class="text-gray-500">Est. Value</span>
+					<span class="font-medium text-gray-200">
+						{pendingOrder.estimatedValue != null ? '~' + formatUsd(pendingOrder.estimatedValue) : '—'}
+					</span>
+				</div>
+				<!-- TIF (limit only) -->
+				{#if pendingOrder.orderType === 'limit' && pendingOrder.tif}
+					<div class="flex justify-between">
+						<span class="text-gray-500">TIF</span>
+						<span class="font-medium text-gray-200">{pendingOrder.tif === 'Gtc' ? 'GTC' : pendingOrder.tif === 'Ioc' ? 'IOC' : 'ALO'}</span>
+					</div>
+				{/if}
+
+				<!-- Current position (perp only) -->
+				{#if !isSpot}
+					<div class="pt-2 mt-2 border-t border-border-primary text-[11px]
+						{positionDirection === 'long' ? 'text-long' : positionDirection === 'short' ? 'text-short' : 'text-gray-500'}">
+						{#if positionDirection === 'long'}
+							Current: Long {formatSize(positionSize, Math.max(0, szDecimals))} {coin}
+						{:else if positionDirection === 'short'}
+							Current: Short {formatSize(positionSize, Math.max(0, szDecimals))} {coin}
+						{:else}
+							Current: No position
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Footer -->
+			<div class="flex gap-2 px-4 py-3 border-t border-border-primary">
+				<button
+					type="button"
+					class="flex-1 py-2 rounded-lg text-xs font-semibold border border-border-primary text-gray-400 hover:text-gray-200 hover:border-gray-400 transition-colors"
+					onclick={closeConfirm}
+				>Cancel</button>
+				<button
+					type="button"
+					class="flex-1 py-2 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-50
+						{pendingOrder.side === 'buy' ? 'bg-long hover:bg-long/90' : 'bg-short hover:bg-short/90'}"
+					disabled={submitting}
+					onclick={executeOrder}
+				>
+					{submitting ? 'Submitting…' : 'Confirm →'}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.allocation-slider {
