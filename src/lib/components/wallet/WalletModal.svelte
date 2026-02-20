@@ -33,8 +33,8 @@
 		}
 	}
 
-	function handleDisconnect() {
-		walletStore.disconnect();
+	async function handleDisconnect() {
+		await walletStore.disconnect();
 		walletStore.modalOpen = false;
 	}
 

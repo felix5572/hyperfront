@@ -58,17 +58,30 @@ async function disconnect() {
 	if (typeof window !== 'undefined') {
 		localStorage.setItem('hf_wallet_disconnected', 'true');
 	}
-	if (connectedVia === 'walletconnect') {
-		await disconnectWalletConnect();
-	}
+	// Clear state immediately so the UI updates right away,
+	// even if the WalletConnect network disconnect call below takes time or throws.
+	const wasWalletConnect = connectedVia === 'walletconnect';
 	address = null;
 	walletClient = null;
 	connectedVia = null;
 	status = 'disconnected';
 	error = null;
+
+	if (wasWalletConnect) {
+		try {
+			await disconnectWalletConnect();
+		} catch {
+			// Best-effort — local state is already cleared above.
+		}
+	}
 }
 
 async function tryReconnect() {
+	// If the user explicitly disconnected, don't auto-reconnect anything.
+	if (typeof window !== 'undefined' && localStorage.getItem('hf_wallet_disconnected') === 'true') {
+		return;
+	}
+
 	// Try WalletConnect first (has an existing session?)
 	const wcResult = await reconnectWalletConnect();
 	if (wcResult) {
@@ -76,10 +89,6 @@ async function tryReconnect() {
 		walletClient = wcResult.walletClient;
 		connectedVia = 'walletconnect';
 		status = 'connected';
-		return;
-	}
-
-	if (typeof window !== 'undefined' && localStorage.getItem('hf_wallet_disconnected') === 'true') {
 		return;
 	}
 
