@@ -1,8 +1,25 @@
 # Hyperfront
 
+<p align="left">
+  <a href="https://t.me/open_hyperfront"><img src="https://img.shields.io/badge/Telegram-Community-blue?logo=telegram&style=flat-square" alt="Telegram"></a>
+  <a href="https://github.com/felix5572/hyperfront/stargazers"><img src="https://img.shields.io/github/stars/felix5572/hyperfront?style=flat-square&color=yellow" alt="Stars"></a>
+  <a href="https://github.com/felix5572/hyperfront/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/SvelteKit-FF3E00?style=flat-square&logo=svelte&logoColor=white" alt="SvelteKit">
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
+</p>
+
 An unofficial, open-source **mobile-first** frontend for Hyperliquid, optimized for phone use.
 
-🌐 **https://hyper-front.xyz**
+🌐 **Website**: [https://hyper-front.xyz](https://hyper-front.xyz)  
+💬 **Telegram**: [https://t.me/open_hyperfront](https://t.me/open_hyperfront)
+
+---
+
+<p align="center">
+  <img src=".github/assets/hyper-front.xyz-markets.jpg" width="45%" alt="Markets Overview" />
+  &nbsp; &nbsp; &nbsp;
+  <img src=".github/assets/hyper-front.xyz-trade.jpg" width="45%" alt="Trading Interface" />
+</p>
 
 ---
 
