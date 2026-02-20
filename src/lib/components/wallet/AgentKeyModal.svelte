@@ -80,7 +80,10 @@
 			// Short delay to show success before close (or just let them see the success state)
 		} catch (e) {
 			agentStore.clear();
-			error = e instanceof Error ? e.message : String(e);
+			const errObj =
+				e instanceof Error ? `${e.toString()}\n${e.stack}` : String(e);
+			error = errObj;
+			console.error("Agent Setup Error:", e);
 			setupStep = null;
 		} finally {
 			loading = false;

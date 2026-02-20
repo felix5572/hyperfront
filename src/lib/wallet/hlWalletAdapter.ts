@@ -21,13 +21,14 @@ export function createHlWalletAdapter(
 		}) {
 			// Extract out EIP712Domain to prevent viem types from complaining
 			const { EIP712Domain, ...restTypes } = params.types;
-			return walletClient.signTypedData({
+
+			return await walletClient.signTypedData({
 				account: address,
 				domain: params.domain,
 				types: restTypes,
 				primaryType: params.primaryType,
 				message: params.message
-			}) as Promise<`0x${string}`>;
+			}) as `0x${string}`;
 		}
 	};
 }
