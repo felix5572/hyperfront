@@ -552,11 +552,18 @@
 					<span class="text-gray-400">Asset</span>
 					<span class="font-semibold text-white">{baseAssetName}</span>
 				</div>
-				<!-- Spot ID (spot only) -->
+				<!-- Spot ID + Tokens (spot only) -->
 				{#if isSpot}
 					<div class="flex justify-between items-center">
 						<span class="text-gray-400">Spot ID</span>
 						<span class="font-mono text-white">{coin}</span>
+					</div>
+					<div class="flex justify-between items-start">
+						<span class="text-gray-400 shrink-0">Tokens</span>
+						<div class="text-right font-mono text-white text-xs leading-snug">
+							<div>[{spotAsset?.pair.tokens[0] ?? '?'}, {spotAsset?.pair.tokens[1] ?? '?'}]</div>
+							<div class="text-gray-300">[{spotAsset?.token.name ?? baseAssetName}, {spotAsset?.quoteToken.name ?? quoteAssetName}]</div>
+						</div>
 					</div>
 				{/if}
 				<!-- Asset ID -->
