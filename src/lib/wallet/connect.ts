@@ -76,8 +76,13 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 
 export async function disconnectWalletConnect(): Promise<void> {
 	if (wcProvider) {
-		await wcProvider.disconnect();
-		wcProvider = null;
+		const p = wcProvider;
+		wcProvider = null; // always clear before disconnect attempt
+		try {
+			await p.disconnect();
+		} catch {
+			// best-effort; local reference already cleared
+		}
 	}
 }
 
