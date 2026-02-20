@@ -14,11 +14,6 @@ const WALLETCONNECT_PROJECT_ID = 'ecd1015a9e50f01b3e2f40f0846aa984';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let wcProvider: any = null;
 
-function isMobileBrowser(): boolean {
-	if (typeof window === 'undefined') return false;
-	return /android|iphone|ipad|ipod/i.test(window.navigator.userAgent);
-}
-
 async function getOrCreateWCProvider() {
 	if (wcProvider) return wcProvider;
 
@@ -42,16 +37,6 @@ async function getOrCreateWCProvider() {
 
 export async function connectWalletConnect(): Promise<ConnectResult> {
 	let provider = await getOrCreateWCProvider();
-	let latestDisplayUri = '';
-	let attemptedDeepLink = false;
-	const onDisplayUri = (uri: string) => {
-		latestDisplayUri = uri;
-		if (!isMobileBrowser() || attemptedDeepLink) return;
-		attemptedDeepLink = true;
-		// Mobile fallback: auto-open MetaMask app when WC URI is ready.
-		window.location.href = `https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`;
-	};
-	provider.on?.('display_uri', onDisplayUri);
 
 	try {
 		await Promise.race([
@@ -66,8 +51,6 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 		if (msg.includes('reset') || msg.includes('rejected')) {
 			wcProvider = null;
 			provider = await getOrCreateWCProvider();
-			attemptedDeepLink = false;
-			provider.on?.('display_uri', onDisplayUri);
 			await Promise.race([
 				provider.connect(),
 				new Promise<never>((_, reject) =>
@@ -78,17 +61,12 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 			wcProvider = null;
 			throw e;
 		}
-	} finally {
-		provider.removeListener?.('display_uri', onDisplayUri);
 	}
 
 	const accounts: string[] = provider.accounts;
 	if (!accounts.length) {
 		wcProvider = null;
-		const deepLinkTip = latestDisplayUri && isMobileBrowser()
-			? ' If MetaMask did not open automatically, open MetaMask and retry WalletConnect.'
-			: '';
-		throw new Error(`No accounts returned from WalletConnect.${deepLinkTip}`);
+		throw new Error('No accounts returned from WalletConnect.');
 	}
 
 	const address = accounts[0] as `0x${string}`;
