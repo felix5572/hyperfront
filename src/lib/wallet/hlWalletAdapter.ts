@@ -6,8 +6,8 @@ import type { AbstractWallet } from '@nktkas/hyperliquid/signing';
  * Builds an SDK-compatible AbstractWallet from a WalletClient.
  *
  * Uses viem's signTypedData action which properly routes through the transport
- * (WalletConnect, injected, etc.) without any chain validation — viem does not
- * check domain.chainId against the connected chain in signTypedData.
+ * (WalletConnect, injected, etc.). EIP712Domain must be stripped from types
+ * because viem derives it from the domain object itself.
  */
 export function createHlWalletAdapter(
 	walletClient: WalletClient | null,
@@ -22,10 +22,13 @@ export function createHlWalletAdapter(
 			primaryType: string;
 			message: Record<string, unknown>;
 		}) {
+			// viem builds EIP712Domain from the domain object — passing it in
+			// types causes a duplicate type error, so strip it first.
+			const { EIP712Domain: _eip712Domain, ...restTypes } = params.types;
 			return viemSignTypedData(walletClient, {
 				account: address,
 				domain: params.domain,
-				types: params.types,
+				types: restTypes,
 				primaryType: params.primaryType,
 				message: params.message
 			});

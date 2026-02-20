@@ -39,11 +39,11 @@
 				new Promise<never>((_, reject) =>
 					setTimeout(
 						() => reject(new Error(
-							'Timed out waiting for wallet signature (90 s). ' +
-							'If your wallet opened but showed nothing, check the ' +
-							'Notifications / Activity tab inside MetaMask and try again.'
+							'Signing timed out (30 s). ' +
+							'If MetaMask opened but showed nothing, check the ' +
+							'Notifications / Activity tab and try again.'
 						)),
-						90_000
+						30_000
 					)
 				)
 			]);
