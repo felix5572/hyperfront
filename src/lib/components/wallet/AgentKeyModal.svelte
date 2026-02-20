@@ -220,6 +220,24 @@
 								Cannot withdraw or transfer funds.
 							</p>
 						</div>
+						<div class="flex gap-3 items-start">
+							<div
+								class="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center shrink-0 mt-0.5"
+							>
+								<span class="text-accent text-[10px] font-bold"
+									>4</span
+								>
+							</div>
+							<p class="text-gray-600 text-[13px]">
+								Manage/Revoke at <a
+									href="https://app.hyperliquid.xyz/API"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-accent hover:underline"
+									>hyperliquid.xyz/API</a
+								>
+							</p>
+						</div>
 					</div>
 
 					{#if loading && setupStep}
