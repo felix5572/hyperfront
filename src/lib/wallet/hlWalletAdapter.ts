@@ -4,12 +4,7 @@ import type { AbstractWallet } from '@nktkas/hyperliquid/signing';
 /**
  * Builds an SDK-compatible AbstractWallet from a WalletClient.
  *
- * We call eth_signTypedData_v4 directly via the transport instead of using
- * viem's signTypedData action, because viem validates that domain.chainId
- * matches the wallet's currently connected chain. Hyperliquid's EIP-712 domain
- * always uses chainId 1337 regardless of which chain the wallet is on — this is
- * a Hyperliquid protocol requirement, not a mistake. The direct RPC call skips
- * viem's chain validation while still producing a correct EIP-712 signature.
+ * It proxies signTypedData to the viem WalletClient.
  */
 export function createHlWalletAdapter(
 	walletClient: WalletClient | null,
@@ -24,16 +19,14 @@ export function createHlWalletAdapter(
 			primaryType: string;
 			message: Record<string, unknown>;
 		}) {
-			const typedData = JSON.stringify({
+			// Extract out EIP712Domain to prevent viem types from complaining
+			const { EIP712Domain, ...restTypes } = params.types;
+			return walletClient.signTypedData({
+				account: address,
 				domain: params.domain,
-				types: params.types,
+				types: restTypes,
 				primaryType: params.primaryType,
 				message: params.message
-			});
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			return (walletClient as any).request({
-				method: 'eth_signTypedData_v4',
-				params: [address, typedData]
 			}) as Promise<`0x${string}`>;
 		}
 	};
