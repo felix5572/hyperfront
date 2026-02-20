@@ -8,8 +8,6 @@
 	let setupStep = $state<string | null>(null);
 	let error = $state<string | null>(null);
 
-	const ARBITRUM_CHAIN_ID = "0xa4b1";
-
 	function close() {
 		agentStore.modalOpen = false;
 		error = null;
@@ -20,70 +18,28 @@
 		error = null;
 		loading = true;
 		try {
-			setupStep = "Generating signing key...";
+			setupStep = "Generating signing key…";
 			agentStore.generateKey();
 
 			const wc = walletStore.walletClient;
-			if (!wc || !walletStore.address)
-				throw new Error("Wallet not connected");
-
-			setupStep = "Ensuring Arbitrum Network...";
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const currentChain = await (wc as any).request({
-				method: "eth_chainId",
-			});
-			if (currentChain !== ARBITRUM_CHAIN_ID) {
-				try {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					await (wc as any).request({
-						method: "wallet_switchEthereumChain",
-						params: [{ chainId: ARBITRUM_CHAIN_ID }],
-					});
-				} catch (switchErr: unknown) {
-					const code = (switchErr as { code?: number })?.code;
-					if (code === 4902) {
-						// eslint-disable-next-line @typescript-eslint/no-explicit-any
-						await (wc as any).request({
-							method: "wallet_addEthereumChain",
-							params: [
-								{
-									chainId: ARBITRUM_CHAIN_ID,
-									chainName: "Arbitrum One",
-									rpcUrls: ["https://arb1.arbitrum.io/rpc"],
-									nativeCurrency: {
-										name: "Ether",
-										symbol: "ETH",
-										decimals: 18,
-									},
-									blockExplorerUrls: ["https://arbiscan.io"],
-								},
-							],
-						});
-					} else {
-						throw switchErr;
-					}
-				}
-			}
+			if (!wc || !walletStore.address) throw new Error("Wallet not connected");
 
 			const agentAddr = agentStore.address;
 			if (!agentAddr) throw new Error("Failed to generate agent key");
 
-			setupStep = "Waiting for wallet signature...";
 			const masterWallet = createHlWalletAdapter(wc, walletStore.address);
 			if (!masterWallet) throw new Error("Wallet adapter not ready");
 
-			setupStep = "Registering with Hyperliquid...";
+			// approveAgent is EIP-712 message signing — no chain switch needed.
+			// The signatureChainId (Arbitrum) is embedded in the action payload itself.
+			setupStep = "Sign the request in your wallet…";
 			await approveAgentWallet(masterWallet, agentAddr);
 
-			setupStep = "Success!";
 			agentStore.markApproved();
-			// Short delay to show success before close (or just let them see the success state)
+			setupStep = null;
 		} catch (e) {
 			agentStore.clear();
-			const errObj =
-				e instanceof Error ? `${e.toString()}\n${e.stack}` : String(e);
-			error = errObj;
-			console.error("Agent Setup Error:", e);
+			error = e instanceof Error ? e.message : String(e);
 			setupStep = null;
 		} finally {
 			loading = false;
