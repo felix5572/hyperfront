@@ -7,7 +7,9 @@ export type ConnectResult = {
 
 // ─── WalletConnect ──────────────────────────────────────────────────
 
-const WALLETCONNECT_PROJECT_ID = 'd4deeac57a8cdbe013059f1680b15656';
+// https://hyper-front.xyz
+const WALLETCONNECT_PROJECT_ID = 'ecd1015a9e50f01b3e2f40f0846aa984';
+
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let wcProvider: any = null;
@@ -92,14 +94,14 @@ export async function reconnectWalletConnect(): Promise<ConnectResult | null> {
 }
 
 export function onWalletConnectAccountsChanged(callback: (accounts: string[]) => void): () => void {
-	if (!wcProvider) return () => {};
+	if (!wcProvider) return () => { };
 	const handler = (accs: string[]) => callback(accs);
 	wcProvider.on('accountsChanged', handler);
 	return () => wcProvider?.removeListener('accountsChanged', handler);
 }
 
 export function onWalletConnectDisconnect(callback: () => void): () => void {
-	if (!wcProvider) return () => {};
+	if (!wcProvider) return () => { };
 	const handler = () => callback();
 	wcProvider.on('disconnect', handler);
 	return () => wcProvider?.removeListener('disconnect', handler);
