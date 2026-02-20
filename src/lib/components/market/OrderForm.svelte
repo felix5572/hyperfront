@@ -19,7 +19,7 @@
 	let orderType = $state<'market' | 'limit'>('limit');
 	let priceInput = $state('');
 	let sizeInput = $state('');
-	let sizeAsset = $state<'base' | 'quote'>('quote');
+	let sizeAsset = $state<'base' | 'quote'>('base');
 	let allocationPct = $state(0);
 	let reduceOnly = $state(false);
 	let tif = $state<Tif>('Gtc');
@@ -499,7 +499,7 @@
 		{:else if submitting}
 			Submitting…
 		{:else}
-			{isBuy ? buyLabel : sellLabel} {coin}
+			{isBuy ? buyLabel : sellLabel} {baseAssetName}
 		{/if}
 	</button>
 </div>
@@ -509,53 +509,70 @@
 	<!-- Backdrop -->
 	<button
 		type="button"
-		class="fixed inset-0 z-50 bg-black/60 cursor-default"
+		class="fixed inset-0 z-[9999] bg-black/70 cursor-default"
 		aria-label="Close confirm dialog"
 		onclick={closeConfirm}
 	></button>
 
 	<!-- Modal card -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+		class="fixed inset-0 z-[10000] flex items-center justify-center pointer-events-none p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="confirm-modal-title"
 	>
-		<div class="pointer-events-auto w-full max-w-xs mx-4 rounded-xl border border-border-primary bg-surface-secondary shadow-2xl">
+		<div class="pointer-events-auto w-full max-w-sm rounded-2xl border border-border-primary bg-surface-primary shadow-2xl overflow-hidden">
 			<!-- Header -->
-			<div class="flex items-center justify-between px-4 py-3 border-b border-border-primary">
-				<span id="confirm-modal-title" class="text-sm font-semibold text-gray-200">Confirm Order</span>
+			<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
+				<span id="confirm-modal-title" class="text-base font-bold text-white">Confirm Order</span>
 				<button
 					type="button"
-					class="text-gray-500 hover:text-gray-300 text-lg leading-none"
+					class="text-gray-400 hover:text-white text-xl leading-none transition-colors"
 					aria-label="Close"
 					onclick={closeConfirm}
 				>✕</button>
 			</div>
 
 			<!-- Body -->
-			<div class="px-4 py-3 space-y-2 text-xs">
+			<div class="px-5 py-4 space-y-3 text-sm">
 				<!-- Side -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Side</span>
-					<span class="font-semibold {pendingOrder.side === 'buy' ? 'text-long' : 'text-short'}">
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Side</span>
+					<span class="font-bold text-base {pendingOrder.side === 'buy' ? 'text-long' : 'text-short'}">
 						{pendingOrder.side === 'buy' ? buyLabel : sellLabel}
 					</span>
 				</div>
+				<!-- Market type -->
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Market</span>
+					<span class="font-semibold text-white">{isSpot ? 'Spot' : 'Perpetual'}</span>
+				</div>
 				<!-- Asset -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Asset</span>
-					<span class="font-medium text-gray-200">{coin}</span>
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Asset</span>
+					<span class="font-semibold text-white">{baseAssetName}</span>
+				</div>
+				<!-- Spot ID (spot only) -->
+				{#if isSpot}
+					<div class="flex justify-between items-center">
+						<span class="text-gray-400">Spot ID</span>
+						<span class="font-mono text-white">{coin}</span>
+					</div>
+				{/if}
+				<!-- Asset ID -->
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Asset ID</span>
+					<span class="font-mono text-white">{pendingOrder.asset}</span>
 				</div>
 				<!-- Order Type -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Order Type</span>
-					<span class="font-medium text-gray-200 capitalize">{pendingOrder.orderType}</span>
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Order Type</span>
+					<span class="font-semibold text-white capitalize">{pendingOrder.orderType}</span>
 				</div>
 				<!-- Price -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Price</span>
-					<span class="font-medium text-gray-200">
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Price</span>
+					<span class="font-semibold text-white">
 						{#if pendingOrder.orderType === 'market'}
 							Market (±3% slippage)
 						{:else}
@@ -564,36 +581,36 @@
 					</span>
 				</div>
 				<!-- Mid Price snapshot -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Mid Price</span>
-					<span class="font-medium text-gray-200">
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Mid Price</span>
+					<span class="font-semibold text-white">
 						{pendingOrder.midPxSnapshot ? formatUsd(parseFloat(pendingOrder.midPxSnapshot)) : '—'}
 					</span>
 				</div>
 				<!-- Size -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Size</span>
-					<span class="font-medium text-gray-200">{pendingOrder.sizeStr} {coin}</span>
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Size</span>
+					<span class="font-semibold text-white">{pendingOrder.sizeStr} {coin}</span>
 				</div>
 				<!-- Estimated Value -->
-				<div class="flex justify-between">
-					<span class="text-gray-500">Est. Value</span>
-					<span class="font-medium text-gray-200">
+				<div class="flex justify-between items-center">
+					<span class="text-gray-400">Est. Value</span>
+					<span class="font-semibold text-white">
 						{pendingOrder.estimatedValue != null ? '~' + formatUsd(pendingOrder.estimatedValue) : '—'}
 					</span>
 				</div>
 				<!-- TIF (limit only) -->
 				{#if pendingOrder.orderType === 'limit' && pendingOrder.tif}
-					<div class="flex justify-between">
-						<span class="text-gray-500">TIF</span>
-						<span class="font-medium text-gray-200">{pendingOrder.tif === 'Gtc' ? 'GTC' : pendingOrder.tif === 'Ioc' ? 'IOC' : 'ALO'}</span>
+					<div class="flex justify-between items-center">
+						<span class="text-gray-400">TIF</span>
+						<span class="font-semibold text-white">{pendingOrder.tif === 'Gtc' ? 'GTC' : pendingOrder.tif === 'Ioc' ? 'IOC' : 'ALO'}</span>
 					</div>
 				{/if}
 
 				<!-- Current position (perp only) -->
 				{#if !isSpot}
-					<div class="pt-2 mt-2 border-t border-border-primary text-[11px]
-						{positionDirection === 'long' ? 'text-long' : positionDirection === 'short' ? 'text-short' : 'text-gray-500'}">
+					<div class="pt-3 mt-1 border-t border-border-primary text-sm font-medium
+						{positionDirection === 'long' ? 'text-long' : positionDirection === 'short' ? 'text-short' : 'text-gray-400'}">
 						{#if positionDirection === 'long'}
 							Current: Long {formatSize(positionSize, Math.max(0, szDecimals))} {coin}
 						{:else if positionDirection === 'short'}
@@ -606,15 +623,15 @@
 			</div>
 
 			<!-- Footer -->
-			<div class="flex gap-2 px-4 py-3 border-t border-border-primary">
+			<div class="flex gap-3 px-5 py-4 border-t border-border-primary">
 				<button
 					type="button"
-					class="flex-1 py-2 rounded-lg text-xs font-semibold border border-border-primary text-gray-400 hover:text-gray-200 hover:border-gray-400 transition-colors"
+					class="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-border-primary text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
 					onclick={closeConfirm}
 				>Cancel</button>
 				<button
 					type="button"
-					class="flex-1 py-2 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-50
+					class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-colors disabled:opacity-50
 						{pendingOrder.side === 'buy' ? 'bg-long hover:bg-long/90' : 'bg-short hover:bg-short/90'}"
 					disabled={submitting}
 					onclick={executeOrder}

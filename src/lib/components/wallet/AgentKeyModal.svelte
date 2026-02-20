@@ -85,44 +85,63 @@
 			aria-modal="true"
 			aria-label="Agent Wallet"
 		>
+			<!-- Header -->
 			<div class="flex items-center justify-between px-5 py-4 border-b border-border-primary">
-				<span class="text-sm font-semibold text-gray-900">Agent Wallet</span>
+				<span class="text-base font-bold text-white">Agent Wallet</span>
 				<button
-					class="text-gray-400 hover:text-gray-700 transition-colors text-lg leading-none"
+					class="text-gray-400 hover:text-white transition-colors text-xl leading-none"
 					onclick={close}
 				>✕</button>
 			</div>
 
-			<div class="px-5 py-4 space-y-3 text-[13px] text-gray-700 leading-relaxed">
+			<!-- Body -->
+			<div class="px-5 py-4 space-y-4 text-sm leading-relaxed">
 				{#if agentStore.approved && agentStore.address}
-					<div class="flex items-center gap-2 text-sm text-green-600 font-semibold">
+					<!-- Approved state -->
+					<div class="flex items-center gap-2 text-green-400 font-semibold">
 						<span>✓</span>
 						<span>Agent wallet active</span>
 					</div>
-					<p class="text-xs text-gray-500 font-mono">
-						{agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}
+					<div class="rounded-lg border border-border-primary bg-surface-secondary p-3 space-y-2 text-sm">
+						<div class="flex justify-between items-center">
+							<span class="text-gray-400">App</span>
+							<span class="text-white font-medium">hyper-front.xyz</span>
+						</div>
+						<div class="flex justify-between items-center">
+							<span class="text-gray-400">Agent address</span>
+							<span class="text-white font-mono">{agentStore.address.slice(0, 6)}…{agentStore.address.slice(-4)}</span>
+						</div>
+					</div>
+					<p class="text-gray-300">Orders are signed locally. The key lives in memory only and disappears on refresh.</p>
+					<p class="text-gray-400 text-sm">
+						To revoke this agent wallet, visit
+						<a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline font-medium">app.hyperliquid.xyz/API</a>
 					</p>
-					<p class="text-gray-600">Orders are signed locally. The key lives in memory only and disappears on refresh.</p>
 				{:else}
-					<p class="text-gray-700">Required to place and cancel orders on Hyperfront.</p>
-					<div class="space-y-1.5">
+					<!-- Not yet approved state -->
+					<p class="text-gray-200">Required to place and cancel orders on Hyperfront.</p>
+					<div class="space-y-2.5">
 						<div class="flex gap-2">
-							<span class="text-gray-400 shrink-0">·</span>
-							<span>Can only <span class="text-gray-900 font-semibold">place and cancel orders</span> — cannot withdraw or transfer funds</span>
+							<span class="text-gray-500 shrink-0 mt-0.5">·</span>
+							<span class="text-gray-300">Can only <span class="text-white font-semibold">place and cancel orders</span> — cannot withdraw or transfer funds</span>
 						</div>
 						<div class="flex gap-2">
-							<span class="text-gray-400 shrink-0">·</span>
-							<span>Key exists in memory only, gone on refresh</span>
+							<span class="text-gray-500 shrink-0 mt-0.5">·</span>
+							<span class="text-gray-300">Key lives in memory only, cleared on refresh</span>
 						</div>
 						<div class="flex gap-2">
-							<span class="text-gray-400 shrink-0">·</span>
-							<span>Manage existing agents: <a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline">app.hyperliquid.xyz/API</a></span>
+							<span class="text-gray-500 shrink-0 mt-0.5">·</span>
+							<span class="text-gray-300">App name: <span class="text-white font-medium">hyper-front.xyz</span></span>
+						</div>
+						<div class="flex gap-2">
+							<span class="text-gray-500 shrink-0 mt-0.5">·</span>
+							<span class="text-gray-300">To revoke: <a href="https://app.hyperliquid.xyz/API" target="_blank" rel="noopener noreferrer" class="text-accent underline">app.hyperliquid.xyz/API</a></span>
 						</div>
 					</div>
 					{#if error}
-						<div class="rounded-lg bg-red-50 border border-red-200 p-3 space-y-1">
-							<p class="text-xs font-semibold text-red-700">Setup failed</p>
-							<p class="text-xs text-red-600 break-all">{error}</p>
+						<div class="rounded-lg bg-red-900/40 border border-red-500/50 p-3 space-y-1">
+							<p class="text-sm font-semibold text-red-400">Setup failed</p>
+							<p class="text-sm text-red-300 break-all">{error}</p>
 						</div>
 					{/if}
 				{/if}
