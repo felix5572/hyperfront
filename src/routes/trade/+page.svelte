@@ -8,6 +8,9 @@
 	import { INFO_URL } from "$utils/constants";
 	import { formatTime, formatUsd } from "$utils/format";
 
+	const appVersion =
+		typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+
 	type SubAccountItem = {
 		name?: string;
 		subAccountUser: `0x${string}`;
@@ -334,6 +337,16 @@
 					with limited permissions and small balances when possible.
 				</p>
 			</div>
+		</div>
+	</div>
+
+	<div class="px-4 pb-2">
+		<div
+			class="flex items-center justify-center p-2 rounded-lg border border-border-secondary bg-surface-secondary/50"
+		>
+			<span class="text-[10px] text-gray-400 font-mono tracking-wide">
+				Version {appVersion}
+			</span>
 		</div>
 	</div>
 

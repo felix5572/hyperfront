@@ -33,6 +33,9 @@ async function connect(method: ConnectMethod) {
 	connectLock = true;
 	status = 'connecting';
 	error = null;
+	if (typeof window !== 'undefined') {
+		localStorage.removeItem('hf_wallet_disconnected');
+	}
 	try {
 		const result =
 			method === 'injected'
@@ -52,6 +55,9 @@ async function connect(method: ConnectMethod) {
 }
 
 async function disconnect() {
+	if (typeof window !== 'undefined') {
+		localStorage.setItem('hf_wallet_disconnected', 'true');
+	}
 	if (connectedVia === 'walletconnect') {
 		await disconnectWalletConnect();
 	}
@@ -72,6 +78,11 @@ async function tryReconnect() {
 		status = 'connected';
 		return;
 	}
+
+	if (typeof window !== 'undefined' && localStorage.getItem('hf_wallet_disconnected') === 'true') {
+		return;
+	}
+
 	// Fall back to injected (already authorised?)
 	const injResult = await reconnectInjectedWallet();
 	if (injResult) {

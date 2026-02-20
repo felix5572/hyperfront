@@ -2,8 +2,14 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 import { defineConfig } from 'vite';
+import { execSync } from 'child_process';
+
+const commitHash = execSync('git rev-parse --short HEAD').toString().trim();
 
 export default defineConfig({
+	define: {
+		__APP_VERSION__: JSON.stringify(commitHash)
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
