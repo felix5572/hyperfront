@@ -15,6 +15,13 @@ const config = {
 			$stores: 'src/lib/stores',
 			$api: 'src/lib/api',
 			$utils: 'src/lib/utils'
+		},
+		csp: {
+			mode: 'hash',
+			directives: {
+				'script-src': ['self'],
+				'object-src': ['none']
+			}
 		}
 	}
 };
