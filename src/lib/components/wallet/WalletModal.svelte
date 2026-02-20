@@ -33,10 +33,15 @@
 		}
 	}
 
-	async function handleDisconnect() {
+async function handleDisconnect() {
+	connectError = null;
+	try {
 		await walletStore.disconnect();
 		walletStore.modalOpen = false;
+	} catch (e) {
+		connectError = e instanceof Error ? e.message : String(e);
 	}
+}
 
 	const viaLabel = $derived(
 		walletStore.connectedVia === 'injected' ? 'MetaMask / Browser Wallet' : 'WalletConnect'

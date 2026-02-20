@@ -85,9 +85,14 @@ export async function disconnectWalletConnect(): Promise<void> {
 	if (wcProvider) {
 		const p = wcProvider;
 		wcProvider = null;
-		await p.disconnect(); // fast fail — errors surface to caller
+		try {
+			await p.disconnect(); // fast fail — errors surface to caller
+		} finally {
+			clearWCStorage(); // always clear zombie session data
+		}
+		return;
 	}
-	clearWCStorage(); // always clear zombie session data
+	clearWCStorage();
 }
 
 export async function reconnectWalletConnect(): Promise<ConnectResult | null> {

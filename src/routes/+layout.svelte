@@ -18,11 +18,15 @@
 	onMount(() => {
 		const injCleanup = walletStore.setupListeners(); // injected listeners — safe to register immediately
 
-		walletStore.tryReconnect().then(() => {
-			if (walletStore.connectedVia === 'walletconnect') {
-				wcListenerCleanup = walletStore.setupWCListeners(); // WC provider now exists
-			}
-		});
+		void walletStore.tryReconnect()
+			.then(() => {
+				if (walletStore.connectedVia === 'walletconnect') {
+					wcListenerCleanup = walletStore.setupWCListeners(); // WC provider now exists
+				}
+			})
+			.catch(() => {
+				// keep UI usable even if reconnect fails
+			});
 
 		return () => {
 			injCleanup();
@@ -30,9 +34,13 @@
 		};
 	});
 
-	// Only clear agent after initialization is complete and wallet is truly disconnected
+	// Only clear agent after initialization when the user explicitly disconnected.
 	$effect(() => {
-		if (walletStore.initialized && !walletStore.isConnected) {
+		if (
+			walletStore.initialized &&
+			!walletStore.isConnected &&
+			walletStore.lastDisconnectByUser
+		) {
 			agentStore.clear();
 		}
 	});

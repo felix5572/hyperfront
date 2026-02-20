@@ -24,16 +24,31 @@ let error = $state<string | null>(null);
 let modalOpen = $state(false);
 let connectedVia = $state<ConnectMethod | null>(null);
 let initialized = $state(false);
+let lastDisconnectByUser = $state(false);
 
 let connectLock = false;
+let wcListenersCleanup: (() => void) | null = null;
 
 const isConnected = $derived(status === 'connected' && address !== null);
+
+function clearWCListenerBindings() {
+	wcListenersCleanup?.();
+	wcListenersCleanup = null;
+}
+
+function setDisconnectedState() {
+	address = null;
+	walletClient = null;
+	connectedVia = null;
+	status = 'disconnected';
+}
 
 async function connect(method: ConnectMethod) {
 	if (connectLock) return;
 	connectLock = true;
 	status = 'connecting';
 	error = null;
+	lastDisconnectByUser = false;
 	if (typeof window !== 'undefined') {
 		localStorage.removeItem('hf_wallet_disconnected');
 	}
@@ -58,15 +73,14 @@ async function connect(method: ConnectMethod) {
 	}
 }
 
-async function disconnect() {
+async function disconnect(byUser = true) {
+	lastDisconnectByUser = byUser;
 	if (typeof window !== 'undefined') {
-		localStorage.setItem('hf_wallet_disconnected', 'true');
+		if (byUser) localStorage.setItem('hf_wallet_disconnected', 'true');
 	}
 	const wasWC = connectedVia === 'walletconnect';
-	address = null;
-	walletClient = null;
-	connectedVia = null;
-	status = 'disconnected';
+	clearWCListenerBindings();
+	setDisconnectedState();
 	error = null;
 	if (wasWC) {
 		await disconnectWalletConnect(); // fast fail — errors surface to caller
@@ -88,6 +102,7 @@ async function tryReconnect() {
 			walletClient = wcResult.walletClient;
 			connectedVia = 'walletconnect';
 			status = 'connected';
+			lastDisconnectByUser = false;
 			return;
 		}
 
@@ -98,6 +113,7 @@ async function tryReconnect() {
 			walletClient = injResult.walletClient;
 			connectedVia = 'injected';
 			status = 'connected';
+			lastDisconnectByUser = false;
 		}
 	} finally {
 		initialized = true; // always mark done, success or failure
@@ -112,7 +128,9 @@ function setupListeners(): () => void {
 		onInjectedAccountsChanged((accounts) => {
 			if (connectedVia !== 'injected') return;
 			if (accounts.length === 0) {
-				disconnect();
+				void disconnect(false).catch((e) => {
+					error = e instanceof Error ? e.message : String(e);
+				});
 			} else {
 				const newAddr = accounts[0] as `0x${string}`;
 				if (newAddr !== address) {
@@ -128,7 +146,9 @@ function setupListeners(): () => void {
 	cleanups.push(
 		onInjectedDisconnect(() => {
 			if (connectedVia !== 'injected') return;
-			disconnect();
+			void disconnect(false).catch((e) => {
+				error = e instanceof Error ? e.message : String(e);
+			});
 		})
 	);
 
@@ -137,17 +157,25 @@ function setupListeners(): () => void {
 
 // WC-specific listeners — call only after wcProvider exists (post-connect or post-reconnect)
 function setupWCListeners(): () => void {
+	clearWCListenerBindings();
 	const cleanups: (() => void)[] = [];
 
 	cleanups.push(
 		onWalletConnectAccountsChanged((accounts) => {
 			if (connectedVia !== 'walletconnect') return;
 			if (accounts.length === 0) {
-				disconnect();
+				void disconnect(false).catch((e) => {
+					error = e instanceof Error ? e.message : String(e);
+				});
 			} else {
 				const newAddr = accounts[0] as `0x${string}`;
 				if (newAddr !== address) {
 					address = newAddr; // only update address; transport (provider) stays the same
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const provider = (walletClient?.transport as any)?.value;
+					if (provider) {
+						walletClient = createWalletClient({ account: newAddr, transport: custom(provider) });
+					}
 				}
 			}
 		})
@@ -156,11 +184,15 @@ function setupWCListeners(): () => void {
 	cleanups.push(
 		onWalletConnectDisconnect(() => {
 			if (connectedVia !== 'walletconnect') return;
-			disconnect();
+			void disconnect(false).catch((e) => {
+				error = e instanceof Error ? e.message : String(e);
+			});
 		})
 	);
 
-	return () => cleanups.forEach((fn) => fn());
+	const cleanup = () => cleanups.forEach((fn) => fn());
+	wcListenersCleanup = cleanup;
+	return cleanup;
 }
 
 export const walletStore = {
@@ -173,6 +205,7 @@ export const walletStore = {
 	set modalOpen(v: boolean) { modalOpen = v; },
 	get connectedVia() { return connectedVia; },
 	get initialized() { return initialized; },
+	get lastDisconnectByUser() { return lastDisconnectByUser; },
 	connect,
 	disconnect,
 	tryReconnect,
