@@ -30,10 +30,23 @@
 			const masterWallet = createHlWalletAdapter(wc, walletStore.address);
 			if (!masterWallet) throw new Error("Wallet adapter not ready");
 
-			// approveAgent is EIP-712 message signing — no chain switch needed.
-			// The signatureChainId (Arbitrum) is embedded in the action payload itself.
 			setupStep = "Sign the request in your wallet…";
-			await approveAgentWallet(masterWallet, agentAddr);
+
+			// Race signing against a 90 s timeout so we surface a clear message
+			// if the wallet opens but the user never sees the prompt.
+			await Promise.race([
+				approveAgentWallet(masterWallet, agentAddr),
+				new Promise<never>((_, reject) =>
+					setTimeout(
+						() => reject(new Error(
+							'Timed out waiting for wallet signature (90 s). ' +
+							'If your wallet opened but showed nothing, check the ' +
+							'Notifications / Activity tab inside MetaMask and try again.'
+						)),
+						90_000
+					)
+				)
+			]);
 
 			agentStore.markApproved();
 			setupStep = null;
