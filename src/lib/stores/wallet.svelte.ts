@@ -1,4 +1,4 @@
-import type { WalletClient, Transport } from 'viem';
+import { createWalletClient, custom, type WalletClient, type Transport } from 'viem';
 import {
 	connectWalletConnect,
 	disconnectWalletConnect,
@@ -23,6 +23,7 @@ let walletClient = $state<WalletClient<Transport> | null>(null);
 let error = $state<string | null>(null);
 let modalOpen = $state(false);
 let connectedVia = $state<ConnectMethod | null>(null);
+let initialized = $state(false);
 
 let connectLock = false;
 
@@ -45,6 +46,9 @@ async function connect(method: ConnectMethod) {
 		walletClient = result.walletClient;
 		connectedVia = method;
 		status = 'connected';
+		if (method === 'walletconnect') {
+			setupWCListeners(); // wcProvider now exists
+		}
 	} catch (e) {
 		status = 'disconnected';
 		error = e instanceof Error ? e.message : String(e);
@@ -58,67 +62,51 @@ async function disconnect() {
 	if (typeof window !== 'undefined') {
 		localStorage.setItem('hf_wallet_disconnected', 'true');
 	}
-	// Clear state immediately so the UI updates right away,
-	// even if the WalletConnect network disconnect call below takes time or throws.
-	const wasWalletConnect = connectedVia === 'walletconnect';
+	const wasWC = connectedVia === 'walletconnect';
 	address = null;
 	walletClient = null;
 	connectedVia = null;
 	status = 'disconnected';
 	error = null;
-
-	if (wasWalletConnect) {
-		try {
-			await disconnectWalletConnect();
-		} catch {
-			// Best-effort — local state is already cleared above.
-		}
+	if (wasWC) {
+		await disconnectWalletConnect(); // fast fail — errors surface to caller
 	}
 }
 
 async function tryReconnect() {
 	// If the user explicitly disconnected, don't auto-reconnect anything.
 	if (typeof window !== 'undefined' && localStorage.getItem('hf_wallet_disconnected') === 'true') {
+		initialized = true;
 		return;
 	}
 
-	// Try WalletConnect first (has an existing session?)
-	const wcResult = await reconnectWalletConnect();
-	if (wcResult) {
-		address = wcResult.address;
-		walletClient = wcResult.walletClient;
-		connectedVia = 'walletconnect';
-		status = 'connected';
-		return;
-	}
+	try {
+		// Try WalletConnect first (has an existing session?)
+		const wcResult = await reconnectWalletConnect();
+		if (wcResult) {
+			address = wcResult.address;
+			walletClient = wcResult.walletClient;
+			connectedVia = 'walletconnect';
+			status = 'connected';
+			return;
+		}
 
-	// Fall back to injected (already authorised?)
-	const injResult = await reconnectInjectedWallet();
-	if (injResult) {
-		address = injResult.address;
-		walletClient = injResult.walletClient;
-		connectedVia = 'injected';
-		status = 'connected';
+		// Fall back to injected (already authorised?)
+		const injResult = await reconnectInjectedWallet();
+		if (injResult) {
+			address = injResult.address;
+			walletClient = injResult.walletClient;
+			connectedVia = 'injected';
+			status = 'connected';
+		}
+	} finally {
+		initialized = true; // always mark done, success or failure
 	}
 }
 
-function setupListeners() {
+// Only injected listeners — safe to register immediately (no wcProvider dependency)
+function setupListeners(): () => void {
 	const cleanups: (() => void)[] = [];
-
-	cleanups.push(
-		onWalletConnectAccountsChanged((accounts) => {
-			if (connectedVia !== 'walletconnect') return;
-			if (accounts.length === 0) disconnect();
-			else connect('walletconnect');
-		})
-	);
-
-	cleanups.push(
-		onWalletConnectDisconnect(() => {
-			if (connectedVia !== 'walletconnect') return;
-			disconnect();
-		})
-	);
 
 	cleanups.push(
 		onInjectedAccountsChanged((accounts) => {
@@ -128,7 +116,10 @@ function setupListeners() {
 			} else {
 				const newAddr = accounts[0] as `0x${string}`;
 				if (newAddr !== address) {
-					connect('injected');
+					address = newAddr;
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const ethereum = (window as any).ethereum;
+					walletClient = createWalletClient({ account: newAddr, transport: custom(ethereum) });
 				}
 			}
 		})
@@ -137,6 +128,34 @@ function setupListeners() {
 	cleanups.push(
 		onInjectedDisconnect(() => {
 			if (connectedVia !== 'injected') return;
+			disconnect();
+		})
+	);
+
+	return () => cleanups.forEach((fn) => fn());
+}
+
+// WC-specific listeners — call only after wcProvider exists (post-connect or post-reconnect)
+function setupWCListeners(): () => void {
+	const cleanups: (() => void)[] = [];
+
+	cleanups.push(
+		onWalletConnectAccountsChanged((accounts) => {
+			if (connectedVia !== 'walletconnect') return;
+			if (accounts.length === 0) {
+				disconnect();
+			} else {
+				const newAddr = accounts[0] as `0x${string}`;
+				if (newAddr !== address) {
+					address = newAddr; // only update address; transport (provider) stays the same
+				}
+			}
+		})
+	);
+
+	cleanups.push(
+		onWalletConnectDisconnect(() => {
+			if (connectedVia !== 'walletconnect') return;
 			disconnect();
 		})
 	);
@@ -153,8 +172,10 @@ export const walletStore = {
 	get modalOpen() { return modalOpen; },
 	set modalOpen(v: boolean) { modalOpen = v; },
 	get connectedVia() { return connectedVia; },
+	get initialized() { return initialized; },
 	connect,
 	disconnect,
 	tryReconnect,
-	setupListeners
+	setupListeners,
+	setupWCListeners
 };

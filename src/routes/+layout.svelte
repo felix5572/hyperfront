@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import '../app.css';
 	import Header from '$components/layout/Header.svelte';
 	import BottomNav from '$components/layout/BottomNav.svelte';
@@ -12,8 +13,26 @@
 
 	let { children } = $props();
 
+	let wcListenerCleanup: (() => void) | null = null;
+
+	onMount(() => {
+		const injCleanup = walletStore.setupListeners(); // injected listeners — safe to register immediately
+
+		walletStore.tryReconnect().then(() => {
+			if (walletStore.connectedVia === 'walletconnect') {
+				wcListenerCleanup = walletStore.setupWCListeners(); // WC provider now exists
+			}
+		});
+
+		return () => {
+			injCleanup();
+			wcListenerCleanup?.();
+		};
+	});
+
+	// Only clear agent after initialization is complete and wallet is truly disconnected
 	$effect(() => {
-		if (!walletStore.isConnected) {
+		if (walletStore.initialized && !walletStore.isConnected) {
 			agentStore.clear();
 		}
 	});

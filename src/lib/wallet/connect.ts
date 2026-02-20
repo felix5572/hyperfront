@@ -74,16 +74,20 @@ export async function connectWalletConnect(): Promise<ConnectResult> {
 	return { address, walletClient };
 }
 
+export function clearWCStorage(): void {
+	if (typeof window === 'undefined') return;
+	Object.keys(localStorage)
+		.filter((k) => k.startsWith('wc@2:') || k.startsWith('W3M') || k.startsWith('wagmi'))
+		.forEach((k) => localStorage.removeItem(k));
+}
+
 export async function disconnectWalletConnect(): Promise<void> {
 	if (wcProvider) {
 		const p = wcProvider;
-		wcProvider = null; // always clear before disconnect attempt
-		try {
-			await p.disconnect();
-		} catch {
-			// best-effort; local reference already cleared
-		}
+		wcProvider = null;
+		await p.disconnect(); // fast fail — errors surface to caller
 	}
+	clearWCStorage(); // always clear zombie session data
 }
 
 export async function reconnectWalletConnect(): Promise<ConnectResult | null> {

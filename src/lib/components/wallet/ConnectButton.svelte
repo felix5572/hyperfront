@@ -1,15 +1,8 @@
 <script lang="ts">
 	import { walletStore } from '$stores/wallet.svelte';
 	import { truncateAddress } from '$utils/format';
-	import { onMount } from 'svelte';
 
 	let { variant = 'default' }: { variant?: 'default' | 'large' } = $props();
-
-	onMount(() => {
-		walletStore.tryReconnect();
-		const cleanup = walletStore.setupListeners();
-		return cleanup;
-	});
 </script>
 
 {#if walletStore.isConnected && walletStore.address}
