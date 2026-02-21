@@ -77,27 +77,54 @@
 	const isPositive = $derived(change24h >= 0);
 
 	let subscribedUser: `0x${string}` | null = null;
+	let activeCoin = $state('');
+	let switchingCoin = $state(false);
+	let coinSwitchSeq = 0;
+
+	async function switchCoin(nextCoin: string) {
+		if (!nextCoin || nextCoin === activeCoin || switchingCoin) return;
+		switchingCoin = true;
+		const seq = ++coinSwitchSeq;
+		try {
+			// Unsubscribe old coin-specific stream before switching
+			if (activeCoin) {
+				await unsubscribe(`activeAssetCtx:${activeCoin}`);
+			}
+
+			// For HIP-3 assets (e.g. "xyz:XYZ100"), load dex data before selecting coin.
+			const dexFromCoin = nextCoin.includes(':') ? nextCoin.split(':')[0] : '';
+			if (
+				!marketStore.findPerpAsset(nextCoin) &&
+				dexFromCoin &&
+				marketStore.hip3Dexes.some((d) => d.name === dexFromCoin)
+			) {
+				await marketStore.selectHip3Dex(dexFromCoin);
+			}
+
+			await marketStore.selectCoin(nextCoin);
+			await subscribeActiveAssetCtx(nextCoin, (data: unknown) => {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const d = data as any;
+				// Ignore late updates from stale async switches
+				if (seq !== coinSwitchSeq) return;
+				if (d?.ctx) liveCtx = d.ctx as AssetCtx;
+			});
+			if (seq === coinSwitchSeq) {
+				activeCoin = nextCoin;
+			}
+		} finally {
+			if (seq === coinSwitchSeq) {
+				switchingCoin = false;
+			}
+		}
+	}
 
 	onMount(async () => {
 		try {
 			if (marketStore.perpAssets.length === 0) {
 				await marketStore.initMarketList();
 			}
-			// For HIP-3 assets (e.g. "xyz:XYZ100"), load dex data before selecting coin.
-			if (
-				!marketStore.findPerpAsset(coin) &&
-				hip3DexFromCoin &&
-				marketStore.hip3Dexes.some((d) => d.name === hip3DexFromCoin)
-			) {
-				await marketStore.selectHip3Dex(hip3DexFromCoin);
-			}
-			await marketStore.selectCoin(coin);
-
-			await subscribeActiveAssetCtx(coin, (data: unknown) => {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const d = data as any;
-				if (d?.ctx) liveCtx = d.ctx as AssetCtx;
-			});
+			await switchCoin(coin);
 
 			// Subscribe to orders if wallet connected
 			if (walletStore.address) {
@@ -111,10 +138,18 @@
 
 	onDestroy(() => {
 		void marketStore.unselectCoin();
-		void unsubscribe(`activeAssetCtx:${coin}`);
+		if (activeCoin) {
+			void unsubscribe(`activeAssetCtx:${activeCoin}`);
+		}
 		if (subscribedUser) {
 			void ordersStore.unsubscribeOrders(subscribedUser);
 		}
+	});
+
+	$effect(() => {
+		const c = coin;
+		if (!c) return;
+		void switchCoin(c);
 	});
 
 	$effect(() => {

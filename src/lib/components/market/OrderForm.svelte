@@ -48,9 +48,16 @@
 	let pendingOrder = $state<ConfirmDetails | null>(null);
 
 	const isBuy = $derived(side === "buy");
-	const midPx = $derived(marketStore.midPrice);
 	const spotAsset = $derived(
 		isSpot ? marketStore.findSpotAsset(coin) : undefined,
+	);
+	const perpAsset = $derived(!isSpot ? marketStore.findPerpAsset(coin) : undefined);
+	// Always scope mid price to the current coin to avoid cross-coin leakage
+	// from global selectedCoin races during route transitions.
+	const midPx = $derived(
+		marketStore.allMids[coin] ??
+			(isSpot ? spotAsset?.ctx?.midPx : perpAsset?.ctx?.midPx) ??
+			null,
 	);
 	const baseAssetName = $derived(
 		isSpot ? (spotAsset?.token.name ?? coin) : coin,
