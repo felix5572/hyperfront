@@ -94,3 +94,6 @@ npm run preview
 - iOS Safari: tap Share → Add to Home Screen
 
 Icons in `static/icons/` are placeholder-sized and should be replaced before production.
+
+## LICENSE
+MIT
