@@ -23,6 +23,9 @@
 	let side = $state<"buy" | "sell">("buy");
 	let orderType = $state<"market" | "limit">("limit");
 	let priceInput = $state("");
+	// Once the user touches the price field, stop auto-filling it from mid —
+	// otherwise clearing the field gets instantly overwritten on the next tick.
+	let priceEdited = $state(false);
 	let sizeInput = $state("");
 	let sizeAsset = $state<"base" | "quote">("base");
 	let allocationPct = $state(0);
@@ -62,8 +65,12 @@
 	const baseAssetName = $derived(
 		isSpot ? (spotAsset?.token.name ?? coin) : coin,
 	);
+	// HIP-3 assets carry their own collateral token name (quoteCurrency);
+	// main-dex perps fall back to the main quote (USDC).
 	const quoteAssetName = $derived(
-		isSpot ? (spotAsset?.quoteToken.name ?? "USDC") : marketStore.mainQuote,
+		isSpot
+			? (spotAsset?.quoteToken.name ?? "USDC")
+			: (perpAsset?.quoteCurrency ?? marketStore.mainQuote),
 	);
 
 	const baseBalance = $derived(
@@ -80,6 +87,23 @@
 					),
 				),
 	);
+	// HIP-3 assets settle margin on their own dex, not the main one; the main
+	// dex "withdrawable" is the wrong number for them. Prefer the live all-dexs
+	// WS snapshot, fall back to the REST per-dex fetch (direct page entry).
+	const isHip3 = $derived(!isSpot && coin.includes(":"));
+	const hip3DexName = $derived(isHip3 ? coin.split(":")[0] : null);
+	const hip3Withdrawable = $derived.by((): number | null => {
+		if (!hip3DexName) return null;
+		const tuple = accountStore.allDexsClearinghouse.find(
+			([dex]) => dex === hip3DexName,
+		);
+		const state = tuple
+			? (tuple[1] as { withdrawable?: string })
+			: accountStore.dexClearinghouse[hip3DexName];
+		if (!state) return null;
+		const value = parseFloat(state.withdrawable ?? "");
+		return Number.isFinite(value) ? value : null;
+	});
 	const quoteBalance = $derived(
 		isSpot
 			? parseFloat(
@@ -87,7 +111,9 @@
 						(b) => b.coin === quoteAssetName,
 					)?.total ?? "0",
 				)
-			: parseFloat(accountStore.withdrawable ?? "0"),
+			: isHip3
+				? (hip3Withdrawable ?? 0)
+				: parseFloat(accountStore.withdrawable ?? "0"),
 	);
 	const usdcBalance = $derived(
 		parseFloat(
@@ -213,7 +239,7 @@
 	}
 
 	// Validate and show confirmation modal
-	function submitOrder() {
+	async function submitOrder() {
 		submitError = null;
 		if (
 			!walletStore.isConnected ||
@@ -223,7 +249,13 @@
 			submitError = "Connect wallet first";
 			return;
 		}
-		const asset = marketStore.getAssetId(coin);
+		let asset: number | null;
+		try {
+			asset = await marketStore.resolveAssetId(coin);
+		} catch (e) {
+			submitError = e instanceof Error ? e.message : String(e);
+			return;
+		}
 		if (asset == null) {
 			submitError = `Unknown asset: ${coin}`;
 			return;
@@ -251,8 +283,9 @@
 				return;
 			}
 		}
-		if (!agentStore.approved || !agentStore.signer) {
-			submitError = "Set up Agent Wallet first";
+		const agentCheck = agentStore.requireSigner(walletStore.address);
+		if ("error" in agentCheck) {
+			submitError = agentCheck.error;
 			agentStore.modalOpen = true;
 			return;
 		}
@@ -284,8 +317,17 @@
 
 	// Actually execute the order after confirmation
 	async function executeOrder() {
-		if (!pendingOrder || !agentStore.signer) return;
-		const wallet = agentStore.signer;
+		if (!pendingOrder) return;
+		// Re-validate at confirm time: the wallet account or agent approval may
+		// have changed while the confirm dialog was open.
+		const agentCheck = agentStore.requireSigner(walletStore.address);
+		if ("error" in agentCheck) {
+			feedbackStore.error("Order Failed", agentCheck.error);
+			closeConfirm();
+			agentStore.modalOpen = true;
+			return;
+		}
+		const wallet = agentCheck.signer;
 		submitting = true;
 		try {
 			const result = await apiPlaceOrder(wallet, {
@@ -294,7 +336,8 @@
 				orderType: pendingOrder.orderType,
 				price: pendingOrder.priceStr,
 				size: pendingOrder.sizeStr,
-				reduceOnly,
+				// reduceOnly is a perp concept; never send it for spot
+				reduceOnly: isSpot ? false : reduceOnly,
 				tif: pendingOrder.tif,
 			});
 			const first = result.statuses[0];
@@ -316,7 +359,6 @@
 				e instanceof Error ? e.message : String(e),
 			);
 			closeConfirm();
-			throw e;
 		} finally {
 			submitting = false;
 		}
@@ -331,7 +373,7 @@
 	}
 
 	$effect(() => {
-		if (midPx && !priceInput) {
+		if (midPx && !priceInput && !priceEdited) {
 			priceInput = formatPrice(midPx, szDecimals, isSpot);
 		}
 	});
@@ -341,6 +383,7 @@
 		lastCoin = coin;
 		sizeInput = "";
 		allocationPct = 0;
+		priceEdited = false;
 		if (orderType === "limit" && midPx) {
 			priceInput = formatPrice(midPx, szDecimals, isSpot);
 		}
@@ -354,6 +397,16 @@
 			accountStore.fetchAccountState(addr),
 			accountStore.fetchSpotState(addr),
 		]);
+	});
+
+	// HIP-3: fetch the dex-specific clearinghouse state for margin display
+	$effect(() => {
+		const addr = walletStore.address;
+		const dexName = hip3DexName;
+		if (!addr || !dexName) return;
+		accountStore
+			.fetchDexState(addr, dexName)
+			.catch((e) => console.error(`fetchDexState(${dexName}) failed:`, e));
 	});
 
 	$effect(() => {
@@ -414,6 +467,7 @@
 					type="text"
 					bind:value={priceInput}
 					aria-label="Price"
+					oninput={() => (priceEdited = true)}
 					class="flex-1 min-w-0 px-2 py-1.5 bg-surface-tertiary border border-border-primary rounded text-xs text-right tabular-nums font-mono focus:outline-none focus:border-accent"
 				/>
 				<button
@@ -498,10 +552,10 @@
 				)}
 			</div>
 			<div>
-				{quoteAssetName}{isSpot ? "" : " (margin)"}: {formatSize(
-					quoteBalance,
-					4,
-				)}
+				{quoteAssetName}{isSpot ? "" : " (margin)"}: {isHip3 &&
+				hip3Withdrawable == null
+					? "—"
+					: formatSize(quoteBalance, 4)}
 			</div>
 			{#if quoteAssetName !== "USDC"}
 				<div>USDC: {formatSize(usdcBalance, 4)}</div>
@@ -555,16 +609,21 @@
 		</div>
 	</div>
 
-	{#if orderType === "limit"}
+	{#if !isSpot || orderType === "limit"}
 		<div
 			class="p-2 rounded border border-border-secondary bg-surface-tertiary/40 space-y-2"
 		>
-			<label
-				class="flex items-center justify-between text-[11px] text-gray-600"
-			>
-				<span>Reduce Only</span>
-				<input type="checkbox" bind:checked={reduceOnly} />
-			</label>
+			<!-- Reduce Only is a perp concept; show it for both order types so a
+			     checked flag is never hidden from the user. -->
+			{#if !isSpot}
+				<label
+					class="flex items-center justify-between text-[11px] text-gray-600"
+				>
+					<span>Reduce Only</span>
+					<input type="checkbox" bind:checked={reduceOnly} />
+				</label>
+			{/if}
+			{#if orderType === "limit"}
 			<div class="flex items-center justify-between gap-2">
 				<div class="flex items-center gap-1 relative">
 					<span class="text-[11px] text-gray-600">TIF</span>
@@ -617,6 +676,7 @@
 					<option value="Alo">ALO</option>
 				</select>
 			</div>
+			{/if}
 		</div>
 	{/if}
 
@@ -781,6 +841,12 @@
 									? "IOC"
 									: "ALO"}</span
 						>
+					</div>
+				{/if}
+				{#if !isSpot && reduceOnly}
+					<div class="flex justify-between items-center">
+						<span class="text-gray-400">Reduce Only</span>
+						<span class="font-semibold text-white">Yes</span>
 					</div>
 				{/if}
 

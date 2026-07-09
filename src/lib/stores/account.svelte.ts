@@ -65,6 +65,10 @@ let webData3Raw = $state<unknown>(null);
 // Raw REST response for spot (source of spot balances; structure may vary by asset)
 let spotClearinghouseStateRaw = $state<unknown>(null);
 
+// Per-dex clearinghouse states fetched via REST (HIP-3 margin display on
+// direct entry, before the all-dexs WS snapshot arrives).
+let dexClearinghouse = $state<Record<string, ClearinghouseState>>({});
+
 const positions = $derived(
 	clearinghouse?.assetPositions
 		.map((ap) => ap.position)
@@ -101,7 +105,9 @@ const perpDexPositionGroups = $derived.by((): PerpDexPositionsGroup[] => {
 	return [];
 });
 
-const marginSummary = $derived(clearinghouse?.crossMarginSummary ?? null);
+// Full margin summary (includes isolated positions). crossMarginSummary would
+// systematically undercount account value for accounts with isolated margin.
+const marginSummary = $derived(clearinghouse?.marginSummary ?? null);
 const withdrawable = $derived(clearinghouse?.withdrawable ?? '0');
 
 // Non-zero spot balances only
@@ -116,6 +122,12 @@ async function fetchAccountState(user: `0x${string}`) {
 	clearinghouse = state as unknown as ClearinghouseState;
 }
 
+// Fetch clearinghouse state for a specific HIP-3 dex
+async function fetchDexState(user: `0x${string}`, dex: string) {
+	const state = await infoClient.clearinghouseState({ user, dex });
+	dexClearinghouse = { ...dexClearinghouse, [dex]: state as unknown as ClearinghouseState };
+}
+
 // Fetch spot balances
 async function fetchSpotState(user: `0x${string}`) {
 	const result = await infoClient.spotClearinghouseState({ user });
@@ -126,7 +138,7 @@ async function fetchSpotState(user: `0x${string}`) {
 }
 
 // Unsubscribe WS for an address (so we can switch to another)
-async function unsubscribeForAddress(addr: `0x${string}`) {
+async function unsubscribeAccount(addr: `0x${string}`) {
 	await unsubscribe(`allDexsClearinghouseState:${addr}`);
 	await unsubscribe(`webData3:${addr}`);
 }
@@ -150,7 +162,7 @@ async function subscribeWsForUser(user: `0x${string}`) {
 
 // Load account for an address: REST + WS subscription (no wallet required)
 async function loadAddress(user: `0x${string}`) {
-	if (viewAddress) await unsubscribeForAddress(viewAddress);
+	if (viewAddress) await unsubscribeAccount(viewAddress);
 	viewAddress = user;
 	loading = true;
 	await Promise.all([
@@ -159,24 +171,6 @@ async function loadAddress(user: `0x${string}`) {
 	]);
 	loading = false;
 	await subscribeWsForUser(user);
-}
-
-// When wallet connects: same as loadAddress for that wallet
-async function subscribeAccount(user: `0x${string}`) {
-	if (viewAddress) await unsubscribeForAddress(viewAddress);
-	viewAddress = user;
-	loading = true;
-	await Promise.all([
-		fetchAccountState(user),
-		fetchSpotState(user)
-	]);
-	loading = false;
-	await subscribeWsForUser(user);
-}
-
-async function unsubscribeAccount(user: `0x${string}`) {
-	await unsubscribe(`allDexsClearinghouseState:${user}`);
-	await unsubscribe(`webData3:${user}`);
 }
 
 function reset() {
@@ -187,6 +181,7 @@ function reset() {
 	allDexsClearinghouse = [];
 	webData3Raw = null;
 	spotClearinghouseStateRaw = null;
+	dexClearinghouse = {};
 }
 
 export const accountStore = {
@@ -203,10 +198,13 @@ export const accountStore = {
 	get allDexsClearinghouse() { return allDexsClearinghouse; },
 	get webData3Raw() { return webData3Raw; },
 	get spotClearinghouseStateRaw() { return spotClearinghouseStateRaw; },
+	get dexClearinghouse() { return dexClearinghouse; },
 	loadAddress,
 	fetchAccountState,
+	fetchDexState,
 	fetchSpotState,
-	subscribeAccount,
+	// Wallet-connect path is identical to viewing an address
+	subscribeAccount: loadAddress,
 	unsubscribeAccount,
 	reset
 };

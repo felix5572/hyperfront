@@ -14,44 +14,58 @@
 		setupStep = null;
 	}
 
+	const TIMEOUT_MS = 90_000;
+
+	// Re-check expiry whenever the modal opens so a mid-session expiry never
+	// shows a stale "Agent signing active" state.
+	$effect(() => {
+		if (agentStore.modalOpen) agentStore.expireIfNeeded();
+	});
+
 	async function setup() {
 		error = null;
 		loading = true;
 		try {
-			setupStep = "Generating signing key…";
-			agentStore.generateKey();
+			setupStep = "Preparing signing key…";
+			// Reuse an existing un-approved key so a retry re-approves the same
+			// agent address instead of registering yet another named agent.
+			agentStore.ensureKey();
 
 			const wc = walletStore.walletClient;
-			if (!wc || !walletStore.address) throw new Error("Wallet not connected");
+			const master = walletStore.address;
+			if (!wc || !master) throw new Error("Wallet not connected");
 
 			const agentAddr = agentStore.address;
 			if (!agentAddr) throw new Error("Failed to generate agent key");
 
-			const masterWallet = createHlWalletAdapter(wc, walletStore.address);
+			const masterWallet = createHlWalletAdapter(wc, master);
 			if (!masterWallet) throw new Error("Wallet adapter not ready");
 
 			setupStep = "Sign the request in your wallet…";
 
-			// Race signing against a 90 s timeout so we surface a clear message
-			// if the wallet opens but the user never sees the prompt.
-			await Promise.race([
+			// Race signing against a timeout so we surface a clear message if the
+			// wallet opens but the user never sees the prompt. The underlying
+			// request is NOT cancelled — the key is kept so a late approval still
+			// matches this agent address on retry.
+			const expiresAt = await Promise.race([
 				approveAgentWallet(masterWallet, agentAddr),
 				new Promise<never>((_, reject) =>
 					setTimeout(
 						() => reject(new Error(
-							'Signing timed out (30 s). ' +
+							`Signing timed out (${TIMEOUT_MS / 1000} s). ` +
 							'If MetaMask opened but showed nothing, check the ' +
 							'Notifications / Activity tab and try again.'
 						)),
-						30_000
+						TIMEOUT_MS
 					)
 				)
 			]);
 
-			agentStore.markApproved();
+			agentStore.markApproved(master, expiresAt);
 			setupStep = null;
 		} catch (e) {
-			agentStore.clear();
+			// Keep the key: if the approval landed after the timeout, retrying
+			// with the same address recovers it instead of orphaning it.
 			error = e instanceof Error ? e.message : String(e);
 			setupStep = null;
 		} finally {
@@ -121,10 +135,36 @@
 								)}…{agentStore.address.slice(-4)}
 							</span>
 						</div>
+						{#if agentStore.masterAddress}
+							<div
+								class="flex justify-between items-center text-[13px]"
+							>
+								<span class="text-gray-500">Trades account</span>
+								<span
+									class="text-gray-900 font-mono bg-surface-secondary px-1.5 py-0.5 rounded border border-border-primary"
+								>
+									{agentStore.masterAddress.slice(
+										0,
+										6,
+									)}…{agentStore.masterAddress.slice(-4)}
+								</span>
+							</div>
+						{/if}
+						{#if agentStore.expiresAt}
+							<div
+								class="flex justify-between items-center text-[13px]"
+							>
+								<span class="text-gray-500">Valid until</span>
+								<span class="text-gray-900 font-medium">
+									{new Date(agentStore.expiresAt).toLocaleString()}
+								</span>
+							</div>
+						{/if}
 					</div>
 					<p class="text-gray-600">
-						Signing session is active. Orders will be signed
-						automatically on this device.
+						Signing session is active on this device. It expires
+						automatically 24 hours after approval — after that you
+						will be asked to set it up again.
 					</p>
 
 					<div class="pt-2">
@@ -176,8 +216,8 @@
 								>
 							</div>
 							<p class="text-gray-600 text-[13px]">
-								Session persists in this browser until you
-								disconnect.
+								Valid for <span class="text-gray-900 font-semibold">24 hours</span>
+								on this device, then requires a new approval.
 							</p>
 						</div>
 						<div class="flex gap-3 items-start">

@@ -79,10 +79,17 @@
 	let subscribedUser: `0x${string}` | null = null;
 	let activeCoin = $state('');
 	let switchingCoin = $state(false);
+	// Latest coin requested while a switch was in flight — processed when the
+	// current switch finishes (last-wins), instead of being silently dropped.
+	let queuedCoin: string | null = null;
 	let coinSwitchSeq = 0;
 
 	async function switchCoin(nextCoin: string) {
-		if (!nextCoin || nextCoin === activeCoin || switchingCoin) return;
+		if (!nextCoin || nextCoin === activeCoin) return;
+		if (switchingCoin) {
+			queuedCoin = nextCoin;
+			return;
+		}
 		switchingCoin = true;
 		const seq = ++coinSwitchSeq;
 		try {
@@ -109,13 +116,14 @@
 				if (seq !== coinSwitchSeq) return;
 				if (d?.ctx) liveCtx = d.ctx as AssetCtx;
 			});
-			if (seq === coinSwitchSeq) {
-				activeCoin = nextCoin;
-			}
+			activeCoin = nextCoin;
 		} finally {
-			if (seq === coinSwitchSeq) {
-				switchingCoin = false;
-			}
+			switchingCoin = false;
+		}
+		const pending = queuedCoin;
+		queuedCoin = null;
+		if (pending && pending !== activeCoin) {
+			await switchCoin(pending);
 		}
 	}
 

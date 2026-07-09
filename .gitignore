@@ -18,6 +18,13 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# python
+*.pyc
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local-only utilities and secrets
+apifox_self_check.py
+agent_key.json

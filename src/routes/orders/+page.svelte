@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { accountStore } from '$stores/account.svelte';
 	import { ordersStore } from '$stores/orders.svelte';
+	import { marketStore } from '$stores/market.svelte';
 	import { pushAddressHistory } from '$utils/addressHistory';
 	import AddressInput from '$components/portfolio/AddressInput.svelte';
 	import OpenOrders from '$components/orders/OpenOrders.svelte';
@@ -9,6 +11,12 @@
 	import OrderHistory from '$components/orders/OrderHistory.svelte';
 
 	let activeTab: 'open' | 'fills' | 'history' = $state('open');
+
+	// Market metadata is needed for szDecimals-correct display; without it a
+	// cold start on this page renders wrongly rounded prices/sizes.
+	onMount(() => {
+		void marketStore.initMarketList();
+	});
 
 	// When landing on Orders with an address already set (e.g. from Portfolio), subscribe so we get real-time
 	$effect(() => {

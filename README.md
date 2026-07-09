@@ -42,7 +42,7 @@ It's not trying to replace the official interface. It's the thing you reach for 
 - **Unofficial.** Hyperfront has no affiliation with Hyperliquid. It is not created, endorsed, or maintained by the Hyperliquid team. When in doubt, use the official interface.
 - **Buggy.** This is an early-stage open-source project. There are bugs. Data may be wrong. Orders may behave unexpectedly. Do not rely on it as your only tool. (PRs welcome)
 - **Not financial advice.** Nothing shown here constitutes investment advice. You are fully responsible for your own trades and losses.
-- **Your keys stay yours.** Hyperfront never asks for your private key or seed phrase. It never will. Order signing happens in your wallet — you approve every action.
+- **Your keys stay yours.** Hyperfront never asks for your wallet's private key or seed phrase. It never will. The agent-wallet approval is signed in your wallet; after that, orders are signed by a locally generated agent key (trade-only, cannot withdraw, expires after 24 hours) stored in this browser's localStorage.
 - **Verify before you sign.** Only approve wallet prompts you understand. Use an agent wallet with limited permissions and small balances when possible.
 
 ---
@@ -66,9 +66,10 @@ This project is made available "as is", without warranty of any kind, express or
 ## Security Model
 
 - No private keys are ever sent to any server
-- Signing is handled entirely by your connected wallet (MetaMask, WalletConnect, etc.)
+- The [agent wallet](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/api-trading) approval is signed by your connected wallet (MetaMask, WalletConnect, etc.); order/cancel actions are then signed by a locally generated agent key
+- The agent key is trade-only (cannot withdraw or transfer), is bound to the approving account, expires after 24 hours, and lives in the browser's localStorage — an XSS on this origin could read it, so keep balances appropriate for a mobile trading session
 - Once signed, orders are transmitted as-is directly (via a simple proxy) to Hyperliquid — the payload is not modified in transit
-- Prefer using a [Hyperliquid agent wallet](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/api-trading) with limited permissions for mobile usage
+- For larger accounts, approve the agent from a hardware wallet using `scripts/approve_agent.py` instead of a browser extension
 
 The lightweight order-forwarding service lives in `proxy/` (Caddy).
 

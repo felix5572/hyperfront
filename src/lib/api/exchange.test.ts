@@ -102,11 +102,11 @@ describe('placeOrder — order wire construction', () => {
 		expect(lastBody().action.type).toBe('order');
 	});
 
-	it('market order → TIF becomes FrontendMarket', async () => {
+	it('market order → TIF becomes Ioc (documented market-order approach)', async () => {
 		mockFetch.mockReturnValueOnce(okRes([{ resting: { oid: 1 } }]));
 		await placeOrder(fakeWallet, { ...BASE_PARAMS, orderType: 'market' });
 		const order = (lastBody().action.orders as { t: unknown }[])[0];
-		expect(order.t).toEqual({ limit: { tif: 'FrontendMarket' } });
+		expect(order.t).toEqual({ limit: { tif: 'Ioc' } });
 	});
 
 	it('limit order with no explicit TIF → defaults to Gtc', async () => {
@@ -288,6 +288,19 @@ describe('placeOrder — error paths', () => {
 			})
 		);
 		await expect(placeOrder(fakeWallet, BASE_PARAMS)).rejects.toThrow('invalid JSON');
+	});
+
+	it('throws when an ok response is missing the statuses array', async () => {
+		mockFetch.mockReturnValueOnce(
+			Promise.resolve({
+				ok: true,
+				status: 200,
+				statusText: 'OK',
+				text: () =>
+					Promise.resolve(JSON.stringify({ status: 'ok', response: { type: 'order' } }))
+			})
+		);
+		await expect(placeOrder(fakeWallet, BASE_PARAMS)).rejects.toThrow('missing statuses');
 	});
 });
 

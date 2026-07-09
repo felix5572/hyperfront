@@ -27,19 +27,45 @@
 		if (user) await ordersStore.fetchOpenOrders(user);
 	}
 
-	async function cancelOrder(order: { coin: string; oid: number; cloid?: string }) {
-		if (!agentStore.approved || !agentStore.signer) {
+	// Actions are only valid when the orders on screen belong to the connected
+	// wallet. A cancel/modify signed by the agent executes on the agent's master
+	// account — acting while viewing someone else's address would target our own
+	// account's oids, potentially cancelling unrelated own orders.
+	const canAct = $derived(
+		walletStore.isConnected &&
+		!!walletStore.address &&
+		!!ordersStore.viewAddress &&
+		ordersStore.viewAddress.toLowerCase() === walletStore.address.toLowerCase()
+	);
+
+	function getAgentSigner() {
+		if (!canAct) {
+			feedbackStore.error(
+				'Not Your Orders',
+				`Viewing orders of ${ordersStore.viewAddress}, but the connected wallet is ` +
+				`${walletStore.address ?? 'not connected'}. Cancel/modify is only allowed on your own orders.`
+			);
+			return null;
+		}
+		const check = agentStore.requireSigner(walletStore.address);
+		if ('error' in check) {
+			feedbackStore.error('Agent Wallet', check.error);
 			agentStore.modalOpen = true;
-			return;
+			return null;
 		}
-		const wallet = agentStore.signer;
-		const asset = marketStore.getAssetId(order.coin);
-		if (asset == null) {
-			feedbackStore.error('Cancel Failed', `Unknown asset: ${order.coin}`);
-			return;
-		}
+		return check.signer;
+	}
+
+	async function cancelOrder(order: { coin: string; oid: number; cloid?: string }) {
+		const wallet = getAgentSigner();
+		if (!wallet) return;
 		cancellingOid = order.oid;
 		try {
+			const asset = await marketStore.resolveAssetId(order.coin);
+			if (asset == null) {
+				feedbackStore.error('Cancel Failed', `Unknown asset: ${order.coin}`);
+				return;
+			}
 			const result = order.cloid
 				? await apiCancelOrdersByCloid(wallet, [{ asset, cloid: order.cloid as `0x${string}` }])
 				: await apiCancelOrder(wallet, asset, order.oid);
@@ -52,7 +78,6 @@
 			}
 		} catch (e) {
 			feedbackStore.error('Cancel Failed', e instanceof Error ? e.message : String(e));
-			throw e;
 		} finally {
 			cancellingOid = null;
 		}
@@ -60,35 +85,40 @@
 
 	async function cancelAll() {
 		if (!confirm(`Cancel all ${ordersStore.openOrders.length} open orders?`)) return;
-		if (!agentStore.approved || !agentStore.signer) {
-			agentStore.modalOpen = true;
-			return;
-		}
-		const wallet = agentStore.signer;
-		const cancels: { a: number; o: number }[] = [];
-		for (const order of ordersStore.openOrders) {
-			const asset = marketStore.getAssetId(order.coin);
-			if (asset == null) continue;
-			cancels.push({ a: asset, o: order.oid });
-		}
-		if (cancels.length === 0) {
-			feedbackStore.error('Cancel Failed', 'No cancellable orders');
-			return;
-		}
-		const n = cancels.length;
+		const wallet = getAgentSigner();
+		if (!wallet) return;
 		cancellingAll = true;
 		try {
+			const orders = ordersStore.openOrders;
+			const assets = await Promise.all(orders.map((o) => marketStore.resolveAssetId(o.coin)));
+			const cancels: { a: number; o: number }[] = [];
+			const unresolved: string[] = [];
+			orders.forEach((order, i) => {
+				const asset = assets[i];
+				if (asset == null) unresolved.push(`${order.coin} (oid ${order.oid})`);
+				else cancels.push({ a: asset, o: order.oid });
+			});
+			// "Cancel All" must never silently skip orders — report exactly what happened.
+			if (cancels.length === 0) {
+				feedbackStore.error('Cancel Failed', `Could not resolve any orders: ${unresolved.join(', ')}`);
+				return;
+			}
 			const result = await apiCancelOrders(wallet, cancels);
-			const firstError = result.statuses.find((s) => typeof s === 'object' && 'error' in s) as { error: string } | undefined;
-			if (firstError) {
-				feedbackStore.error('Cancel Failed', firstError.error);
+			const errors = result.statuses.filter(
+				(s): s is { error: string } => typeof s === 'object' && 'error' in s
+			);
+			const cancelled = cancels.length - errors.length;
+			if (errors.length > 0 || unresolved.length > 0) {
+				const parts = [`${cancelled}/${orders.length} orders cancelled.`];
+				if (errors.length > 0) parts.push(`${errors.length} rejected: ${errors[0].error}`);
+				if (unresolved.length > 0) parts.push(`${unresolved.length} unresolved: ${unresolved.join(', ')}`);
+				feedbackStore.error('Cancel All Incomplete', parts.join(' '));
 			} else {
-				feedbackStore.success(`${n} orders cancelled`);
+				feedbackStore.success(`${cancelled} orders cancelled`);
 			}
 			await refreshOpenOrders();
 		} catch (e) {
 			feedbackStore.error('Cancel Failed', e instanceof Error ? e.message : String(e));
-			throw e;
 		} finally {
 			cancellingAll = false;
 		}
@@ -107,16 +137,8 @@
 	}
 
 	async function submitModify(order: { coin: string; oid: number; side: string; reduceOnly?: boolean; cloid?: string }) {
-		if (!agentStore.approved || !agentStore.signer) {
-			agentStore.modalOpen = true;
-			return;
-		}
-		const wallet = agentStore.signer;
-		const asset = marketStore.getAssetId(order.coin);
-		if (asset == null) {
-			feedbackStore.error('Modify Failed', `Unknown asset: ${order.coin}`);
-			return;
-		}
+		const wallet = getAgentSigner();
+		if (!wallet) return;
 		const px = editPrice.trim();
 		const sz = editSize.trim();
 		if (!px || !sz || Number(px) <= 0 || Number(sz) <= 0) {
@@ -125,6 +147,11 @@
 		}
 		modifyingOid = order.oid;
 		try {
+			const asset = await marketStore.resolveAssetId(order.coin);
+			if (asset == null) {
+				feedbackStore.error('Modify Failed', `Unknown asset: ${order.coin}`);
+				return;
+			}
 			const isBuy = order.side === 'B' || order.side === 'buy';
 			const result = await apiModifyOrder(wallet, {
 				oid: order.cloid ? (order.cloid as `0x${string}`) : order.oid,
@@ -148,7 +175,6 @@
 			await refreshOpenOrders();
 		} catch (e) {
 			feedbackStore.error('Modify Failed', e instanceof Error ? e.message : String(e));
-			throw e;
 		} finally {
 			modifyingOid = null;
 		}
@@ -159,7 +185,8 @@
 	<div class="flex justify-end px-3 py-1">
 		<button
 			class="text-xs px-3 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 font-semibold hover:bg-red-100 disabled:opacity-50"
-			disabled={!walletStore.isConnected || cancellingAll || ordersStore.openOrders.length === 0}
+			disabled={!canAct || cancellingAll || ordersStore.openOrders.length === 0}
+			title={canAct ? undefined : 'Only available when viewing your own connected wallet'}
 			onclick={cancelAll}
 		>
 			{cancellingAll ? 'Cancelling…' : 'Cancel All'}
@@ -235,8 +262,8 @@
 					<div class="h-10 flex items-center justify-end gap-1">
 						<button
 							class="w-6 h-6 inline-flex items-center justify-center rounded border border-border-primary text-gray-700 hover:bg-surface-hover disabled:opacity-50"
-							title="Modify order"
-							disabled={!walletStore.isConnected || cancellingOid === order.oid || modifyingOid === order.oid}
+							title={canAct ? 'Modify order' : 'Only available when viewing your own connected wallet'}
+							disabled={!canAct || cancellingOid === order.oid || modifyingOid === order.oid}
 							onclick={() => beginEdit(order)}
 						>
 							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

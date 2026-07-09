@@ -62,7 +62,8 @@
 			return allDexs.reduce((sum, [, state]) => {
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				const s = state as any;
-				const val = parseFloat(s?.crossMarginSummary?.accountValue ?? '0');
+				// marginSummary (not crossMarginSummary) — includes isolated positions
+				const val = parseFloat(s?.marginSummary?.accountValue ?? '0');
 				return sum + (Number.isFinite(val) ? val : 0);
 			}, 0);
 		}

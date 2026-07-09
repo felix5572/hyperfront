@@ -10,12 +10,12 @@ const EXCHANGE_PATH = '/exchange';
 export type HexAddress = `0x${string}`;
 export type Cloid = `0x${string}`;
 export type OrderRef = number | Cloid;
-export type Tif = 'Gtc' | 'Ioc' | 'Alo' | 'FrontendMarket' | 'LiquidationMarket';
+// Documented TIF values only (docs/exchange_endpoint.md): "Alo" | "Ioc" | "Gtc"
+export type Tif = 'Gtc' | 'Ioc' | 'Alo';
 
 export type ExchangeRequestOptions = {
 	vaultAddress?: HexAddress;
 	expiresAfter?: number;
-	isTestnet?: boolean;
 };
 
 export type OrderWire = {
@@ -77,7 +77,11 @@ type ExchangeAction =
 	| { type: 'updateIsolatedMargin'; asset: number; isBuy: boolean; ntli: number };
 
 function getStatuses<T>(out: ExchangeResult): T[] {
-	return (out.response?.data?.statuses ?? []) as T[];
+	const statuses = out.response?.data?.statuses;
+	if (!Array.isArray(statuses)) {
+		throw new Error(`Exchange response missing statuses: ${JSON.stringify(out)}`);
+	}
+	return statuses as T[];
 }
 
 async function postExchange(
@@ -90,7 +94,7 @@ async function postExchange(
 		wallet,
 		action,
 		nonce,
-		isTestnet: opts.isTestnet ?? false,
+		isTestnet: false,
 		vaultAddress: opts.vaultAddress,
 		expiresAfter: opts.expiresAfter
 	});
@@ -135,9 +139,11 @@ export async function placeOrder(
 	params: PlaceOrderParams,
 	opts: ExchangeRequestOptions = {}
 ): Promise<PlaceOrderResult> {
+	// Market orders: documented approach is Ioc + aggressive limit price (caller
+	// passes mid ± slippage as the worst-acceptable price).
 	const tif =
 		params.orderType === 'market'
-			? 'FrontendMarket'
+			? 'Ioc'
 			: (params.tif ?? 'Gtc');
 	const order: OrderWire = {
 		a: params.asset,
@@ -276,12 +282,15 @@ export async function updateIsolatedMargin(
 	return { type: out.response?.type };
 }
 
+export const AGENT_VALID_FOR_MS = 24 * 60 * 60 * 1000; // 24 h
+
+/** Approve an agent wallet on mainnet. Returns the on-chain expiry timestamp (ms). */
 export async function approveAgentWallet(
 	masterWallet: AbstractWallet,
 	agentAddress: HexAddress
-): Promise<void> {
+): Promise<number> {
 	const nonce = Date.now();
-	const expiresAt = nonce + 24 * 60 * 60 * 1000; // 24 h
+	const expiresAt = nonce + AGENT_VALID_FOR_MS;
 	const action = {
 		type: 'approveAgent' as const,
 		signatureChainId: '0xa4b1' as const,
@@ -304,4 +313,5 @@ export async function approveAgentWallet(
 	if (!res.ok) throw new Error(`approveAgent failed: ${res.status} - ${text}`);
 	const data = JSON.parse(text);
 	if (data.status !== 'ok') throw new Error(`approveAgent returned non-ok: ${text}`);
+	return expiresAt;
 }

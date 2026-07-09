@@ -33,21 +33,12 @@
 			: null;
 	}
 
-	function getAsset() {
-		return marketStore.getAssetId(position.coin);
-	}
-
 	async function submitLeverage() {
 		error = null;
 		ok = null;
 		const wallet = getWallet();
 		if (!wallet) {
 			error = 'Connect wallet to update leverage';
-			return;
-		}
-		const asset = getAsset();
-		if (asset == null) {
-			error = `Unknown asset: ${position.coin}`;
 			return;
 		}
 		const leverage = Math.floor(Number(leverageInput));
@@ -57,6 +48,11 @@
 		}
 		submittingLeverage = true;
 		try {
+			const asset = await marketStore.resolveAssetId(position.coin);
+			if (asset == null) {
+				error = `Unknown asset: ${position.coin}`;
+				return;
+			}
 			await apiUpdateLeverage(wallet, {
 				asset,
 				isCross: leverageMode === 'cross',
@@ -79,11 +75,6 @@
 			error = 'Connect wallet to update isolated margin';
 			return;
 		}
-		const asset = getAsset();
-		if (asset == null) {
-			error = `Unknown asset: ${position.coin}`;
-			return;
-		}
 		const delta = Number(marginDeltaInput);
 		if (!Number.isFinite(delta) || delta === 0) {
 			error = 'Margin delta must be non-zero';
@@ -96,6 +87,11 @@
 		}
 		submittingMargin = true;
 		try {
+			const asset = await marketStore.resolveAssetId(position.coin);
+			if (asset == null) {
+				error = `Unknown asset: ${position.coin}`;
+				return;
+			}
 			await apiUpdateIsolatedMargin(wallet, {
 				asset,
 				isBuy: Number(position.szi) > 0,

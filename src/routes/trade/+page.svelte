@@ -326,9 +326,10 @@
 				<p>
 					<strong class="font-semibold text-amber-900"
 						>Your keys stay yours.</strong
-					> Hyperfront never asks for your private key or seed phrase.
-					It never will. Order signing happens in your wallet &mdash; you
-					approve every action.
+					> Hyperfront never asks for your wallet's private key or seed
+					phrase. It never will. You approve a trade-only agent key in
+					your wallet; it signs orders on this device and expires after
+					24 hours.
 				</p>
 				<p>
 					<strong class="font-semibold text-amber-900"

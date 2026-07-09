@@ -479,10 +479,44 @@ function resetAll() {
 }
 
 // --- Find helpers ---
+
+// HIP-3 lookup via the per-dex cache, so coins resolve as soon as their dex
+// meta was fetched (e.g. by prefetchHip3Meta) without visiting the HIP-3 tab.
+function findHip3CachedAsset(coin: string): PerpAsset | undefined {
+	if (!coin.includes(':')) return undefined;
+	const dexName = coin.split(':')[0];
+	const cached = hip3DexCache[dexName];
+	const dexInfo = hip3Dexes.find((d) => d.name === dexName);
+	if (!cached || !dexInfo) return undefined;
+	const idx = cached.metas.findIndex((m) => m.name === coin);
+	if (idx < 0) return undefined;
+	return {
+		meta: cached.metas[idx],
+		ctx: cached.ctxs[idx] ?? {} as AssetCtx,
+		assetId: 100000 + dexInfo.perpDexIndex * 10000 + idx,
+		quoteCurrency: getQuoteCurrency(cached.collateralToken)
+	};
+}
+
 function findPerpAsset(coin: string): PerpAsset | undefined {
 	return perpAssets.find((a) => a.meta.name === coin) ??
 		hip3Assets.find((a) => a.meta.name === coin) ??
-		hip3AllAssets.find((a) => a.meta.name === coin);
+		hip3AllAssets.find((a) => a.meta.name === coin) ??
+		findHip3CachedAsset(coin);
+}
+
+/** Warm the HIP-3 dex caches for any "dex:COIN" names (idempotent, cached). */
+async function prefetchHip3Meta(coins: string[]) {
+	const dexNames = [...new Set(
+		coins.filter((c) => c.includes(':')).map((c) => c.split(':')[0])
+	)];
+	if (dexNames.length === 0) return;
+	await fetchPerpDexs();
+	await Promise.all(
+		dexNames
+			.filter((name) => hip3Dexes.some((d) => d.name === name))
+			.map((name) => fetchHip3Meta(name))
+	);
 }
 
 function findSpotAsset(coin: string): SpotAsset | undefined {
@@ -517,6 +551,25 @@ function getAssetId(coin: string): number | null {
 	const spot = findSpotAsset(coin);
 	if (spot != null) return spot.assetId;
 	return null;
+}
+
+/**
+ * Like getAssetId, but fetches whatever metadata is missing first.
+ * Order actions (place/cancel/modify) must use this instead of getAssetId:
+ * cold-starting on /orders or acting on a HIP-3 coin ("dex:COIN") otherwise
+ * fails with "Unknown asset" because the metadata was never loaded.
+ */
+async function resolveAssetId(coin: string): Promise<number | null> {
+	const direct = getAssetId(coin);
+	if (direct != null) return direct;
+
+	if (coin.includes(':')) {
+		await prefetchHip3Meta([coin]);
+		return findHip3CachedAsset(coin)?.assetId ?? null;
+	}
+
+	await Promise.all([fetchPerpMeta(), fetchSpotMeta()]);
+	return getAssetId(coin);
 }
 
 export const marketStore = {
@@ -564,6 +617,8 @@ export const marketStore = {
 	findPerpAsset,
 	findSpotAsset,
 	getAssetId,
+	resolveAssetId,
+	prefetchHip3Meta,
 	getSpotMidPrice,
 	getCoinPriceParams,
 	fetchPerpMeta,
