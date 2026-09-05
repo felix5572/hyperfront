@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import { infoClient } from '$api/client';
-	import { subscribeCandle, unsubscribe } from '$api/subscriptions';
+	import { onMount, onDestroy, untrack } from 'svelte';
+	import { createCandleFeed } from '$api/candleFeed';
 	import { CANDLE_INTERVALS, type CandleInterval } from '$utils/constants';
 
 	let { coin }: { coin: string } = $props();
@@ -13,30 +12,18 @@
 	let resizeObserver: ResizeObserver;
 	let currentInterval = $state<CandleInterval>('15m');
 	let status = $state('Loading chart...');
+	let ready = $state(false);
+	let destroyed = false;
 
-	async function loadCandles(c: string, interval: string) {
-		try {
-			status = 'Fetching candles...';
-			const now = Date.now();
-			const durations: Record<string, number> = {
-				'1m': 6 * 3600_000,
-				'5m': 24 * 3600_000,
-				'15m': 3 * 24 * 3600_000,
-				'1h': 7 * 24 * 3600_000,
-				'4h': 30 * 24 * 3600_000,
-				'1d': 180 * 24 * 3600_000
-			};
-			const startTime = now - (durations[interval] ?? 7 * 24 * 3600_000);
-
-			const result = await infoClient.candleSnapshot({
-				coin: c,
-				interval: interval as "1m" | "5m" | "15m" | "1h" | "4h" | "1d",
-				startTime,
-				endTime: now
-			});
-
-			const candles = (result as any[])
-				.map((candle: any) => ({
+	const feed = createCandleFeed({
+		reset: () => {
+			candleSeries?.setData([]);
+			volumeSeries?.setData([]);
+		},
+		status: (message) => { status = message; },
+		snapshot: (result) => {
+			const candles = result
+				.map((candle) => ({
 					time: Math.floor(candle.t / 1000) as number,
 					open: parseFloat(candle.o),
 					high: parseFloat(candle.h),
@@ -46,63 +33,35 @@
 				}))
 				.sort((a, b) => a.time - b.time);
 
-			if (!candleSeries) {
-				status = 'Chart series not ready';
-				return;
-			}
-
-			if (candles.length === 0) {
-				status = 'No candle data available';
-				return;
-			}
-
-			candleSeries.setData(candles.map(({ volume, ...rest }) => rest));
+			candleSeries?.setData(candles.map(({ volume, ...rest }) => rest));
 			volumeSeries?.setData(candles.map((c) => ({
 				time: c.time,
 				value: c.volume,
 				color: c.close >= c.open ? '#16a34a30' : '#dc262630'
 			})));
 			chart?.timeScale().fitContent();
-			status = '';
-		} catch (e) {
-			status = `Candle snapshot error: ${e instanceof Error ? e.message : String(e)}`;
-			throw e;
-		}
-	}
-
-	async function subscribeToCandles(c: string, interval: string) {
-		try {
-			await subscribeCandle(c, interval, (data: unknown) => {
-				// SDK candle WS: single CandleEvent object, not array
-				const candle = data as any;
-				if (!candle?.t) return;
-
-				const point = {
-					time: Math.floor(candle.t / 1000),
-					open: parseFloat(candle.o),
-					high: parseFloat(candle.h),
-					low: parseFloat(candle.l),
-					close: parseFloat(candle.c)
-				};
-				candleSeries?.update(point);
-				volumeSeries?.update({
-					time: point.time,
-					value: parseFloat(candle.v),
-					color: point.close >= point.open ? '#16a34a30' : '#dc262630'
-				});
+		},
+		update: (candle) => {
+			const point = {
+				time: Math.floor(candle.t / 1000),
+				open: parseFloat(candle.o), high: parseFloat(candle.h),
+				low: parseFloat(candle.l), close: parseFloat(candle.c)
+			};
+			candleSeries?.update(point);
+			volumeSeries?.update({
+				time: point.time, value: parseFloat(candle.v),
+				color: point.close >= point.open ? '#16a34a30' : '#dc262630'
 			});
-		} catch (e) {
-			status = `Candle stream error: ${e instanceof Error ? e.message : String(e)}`;
-			throw e;
 		}
-	}
+	});
 
-	async function changeInterval(interval: CandleInterval) {
-		await unsubscribe(`candle:${coin}:${currentInterval}`);
-		currentInterval = interval;
-		await loadCandles(coin, interval);
-		await subscribeToCandles(coin, interval);
-	}
+	$effect(() => {
+		if (!ready) return;
+		const selectedCoin = coin;
+		const interval = currentInterval;
+		untrack(() => { void feed.select(selectedCoin, interval); });
+		return () => { void feed.dispose(); };
+	});
 
 	onMount(async () => {
 		// lightweight-charts v5: use addSeries(CandlestickSeries, opts)
@@ -113,6 +72,7 @@
 			CandlestickSeries,
 			HistogramSeries
 		} = await import('lightweight-charts');
+		if (destroyed) return;
 
 		const width = chartContainer.clientWidth || 300;
 		const height = chartContainer.clientHeight || 250;
@@ -166,14 +126,14 @@
 		});
 		resizeObserver.observe(chartContainer);
 
-		await loadCandles(coin, currentInterval);
-		await subscribeToCandles(coin, currentInterval);
+		ready = true;
 	});
 
 	onDestroy(() => {
+		destroyed = true;
+		void feed.dispose();
 		resizeObserver?.disconnect();
 		chart?.remove();
-		unsubscribe(`candle:${coin}:${currentInterval}`);
 	});
 </script>
 
@@ -183,7 +143,7 @@
 		{#each CANDLE_INTERVALS as interval}
 			<button
 				class="px-2.5 py-1 text-xs rounded font-medium transition-colors shrink-0 {currentInterval === interval.value ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:text-gray-600'}"
-				onclick={() => changeInterval(interval.value)}
+				onclick={() => { currentInterval = interval.value; }}
 			>
 				{interval.label}
 			</button>

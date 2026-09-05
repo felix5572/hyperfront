@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { accountStore } from '$stores/account.svelte';
 	import { marketStore } from '$stores/market.svelte';
@@ -9,11 +10,12 @@
 
 	const perp = $derived(marketStore.findPerpAsset(coin));
 	const maxLeverage = $derived(perp?.meta.maxLeverage ?? null);
+	const tradingAccount = $derived(accountStore.forAddress(walletStore.address));
 	const currentPosLeverage = $derived(
-		accountStore.positions.find((p) => p.coin === coin)?.leverage?.value ?? null
+		tradingAccount.positions.find((p) => p.coin === coin)?.leverage?.value ?? null
 	);
 	const currentPosMode = $derived(
-		accountStore.positions.find((p) => p.coin === coin)?.leverage?.type === 'cross'
+		tradingAccount.positions.find((p) => p.coin === coin)?.leverage?.type === 'cross'
 			? 'cross'
 			: 'isolated'
 	);
@@ -31,8 +33,9 @@
 
 	$effect(() => {
 		const addr = walletStore.address;
+		const dex = coin.includes(':') ? coin.split(':')[0] : '';
 		if (!addr) return;
-		void accountStore.fetchAccountState(addr);
+		untrack(() => { void accountStore.fetchDexState(addr, dex); });
 	});
 
 	async function submitLeverage() {
@@ -68,7 +71,7 @@
 			});
 			ok = 'Leverage updated';
 			if (walletStore.address) {
-				await accountStore.fetchAccountState(walletStore.address);
+				await accountStore.fetchDexState(walletStore.address, coin.includes(':') ? coin.split(':')[0] : '');
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);

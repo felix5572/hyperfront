@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssetCtx, AssetMeta } from './market.svelte';
+import { subscribeL2Book, subscribeTrades, unsubscribe } from '$api/subscriptions';
 
 const api = vi.hoisted(() => ({
 	perpDexs: vi.fn(),
 	metaAndAssetCtxs: vi.fn(),
-	spotMetaAndAssetCtxs: vi.fn()
+	spotMetaAndAssetCtxs: vi.fn(),
+	observeConnection: vi.fn()
 }));
 
-vi.mock('$api/client', () => ({ infoClient: api }));
+vi.mock('$api/client', () => ({ infoClient: api, observeConnection: api.observeConnection }));
 vi.mock('$api/subscriptions', () => ({
 	subscribeL2Book: vi.fn(),
 	subscribeTrades: vi.fn(),
@@ -54,6 +56,9 @@ beforeEach(() => {
 	api.perpDexs.mockResolvedValue(registry);
 	api.metaAndAssetCtxs.mockImplementation(async ({ dex: name = 'main' } = {}) => metadata(name));
 	api.spotMetaAndAssetCtxs.mockResolvedValue([{ tokens: [], universe: [] }, []]);
+	api.observeConnection.mockImplementation((callback) => { callback(true); return vi.fn(); });
+	vi.mocked(subscribeL2Book).mockResolvedValue(undefined);
+	vi.mocked(subscribeTrades).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -197,5 +202,76 @@ describe('HIP-3 market visibility and asset resolution', () => {
 		expect(store.hip3Assets).toEqual([]);
 		await store.selectHip3Dex('xyz');
 		expect(store.getAssetId('xyz:HIGH')).toBe(140002);
+	});
+
+	it('ignores late book/trade events after switching coins or leaving the detail page', async () => {
+		const store = await loadStore();
+		await store.selectCoin('BTC');
+		const oldBook = vi.mocked(subscribeL2Book).mock.calls[0][1];
+		const oldTrades = vi.mocked(subscribeTrades).mock.calls[0][1];
+		await store.selectCoin('xyz:GOLD');
+		oldBook({ coin: 'BTC', time: 1, levels: [[{ px: '1', sz: '2', n: 1 }], []] });
+		oldTrades([{ coin: 'BTC', side: 'B', px: '1', sz: '2', time: 1, tid: 1 }]);
+		expect(store.bids).toEqual([]);
+		expect(store.recentTrades).toEqual([]);
+		await store.unselectCoin('BTC');
+		expect(store.selectedCoin).toBe('xyz:GOLD');
+		const latestBook = vi.mocked(subscribeL2Book).mock.calls[1][1];
+		await store.unselectCoin('xyz:GOLD');
+		latestBook({ coin: 'xyz:GOLD', time: 1, levels: [[{ px: '2', sz: '1', n: 1 }], []] });
+		expect(store.bids).toEqual([]);
+	});
+
+	it('does not start coin subscriptions after unmounting during cleanup', async () => {
+		const store = await loadStore();
+		const pending = deferred<void>();
+		vi.mocked(unsubscribe).mockReturnValueOnce(pending.promise);
+		const task = store.selectCoin('xyz:GOLD');
+		await store.unselectCoin('xyz:GOLD');
+		pending.resolve();
+		await task;
+		expect(subscribeL2Book).not.toHaveBeenCalled();
+		expect(subscribeTrades).not.toHaveBeenCalled();
+	});
+
+	it('uses live HIP-3 books for trading quotes and never falls back to metadata prices', async () => {
+		const store = await loadStore();
+		await store.selectHip3Dex('xyz');
+		expect(store.getTradeQuote('xyz:HIGH')).toBeNull();
+		await store.selectCoin('xyz:HIGH');
+		const tick = vi.mocked(subscribeL2Book).mock.calls[0][1];
+		const time = Date.now();
+		tick({ coin: 'xyz:HIGH', time, levels: [[{ px: '100', sz: '1', n: 1 }], [{ px: '102', sz: '1', n: 1 }]] });
+		expect(store.getTradeQuote('xyz:HIGH')?.midPx).toBe('101');
+		expect(store.getTradeQuote('BTC')).toBeNull();
+		expect(store.getTradeQuote('xyz:HIGH', time + 15_001)).toBeNull();
+		tick({ coin: 'xyz:HIGH', time, levels: [[], []] });
+		expect(store.getTradeQuote('xyz:HIGH')).toBeNull();
+	});
+
+	it('invalidates quotes on disconnect, reconnect, stream failure, and coin changes', async () => {
+		const store = await loadStore();
+		await store.selectCoin('xyz:HIGH');
+		const call = vi.mocked(subscribeL2Book).mock.calls[0];
+		const tick = call[1];
+		const connection = api.observeConnection.mock.calls[0][0];
+		const update = () => tick({ coin: 'xyz:HIGH', time: Date.now(), levels: [[{ px: '100', sz: '1', n: 1 }], [{ px: '102', sz: '1', n: 1 }]] });
+		update();
+		const original = store.getTradeQuote('xyz:HIGH')!;
+		connection(false);
+		update();
+		expect(store.getTradeQuote('xyz:HIGH')).toBeNull();
+		connection(true);
+		expect(store.getTradeQuote('xyz:HIGH')).toBeNull();
+		update();
+		expect(store.getTradeQuote('xyz:HIGH')!.generation).not.toBe(original.generation);
+		call[2]!(new Error('feed failed'));
+		update();
+		expect(store.getTradeQuote('xyz:HIGH')).toBeNull();
+		await store.selectCoin('BTC');
+		update();
+		expect(store.getTradeQuote('xyz:HIGH')).toBeNull();
+		await store.unselectCoin('BTC');
+		expect(api.observeConnection.mock.results[1].value).toHaveBeenCalledOnce();
 	});
 });

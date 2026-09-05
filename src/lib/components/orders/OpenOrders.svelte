@@ -26,6 +26,10 @@
 		const user = ordersStore.viewAddress ?? walletStore.address;
 		if (user) await ordersStore.fetchOpenOrders(user);
 	}
+	async function retryOrders() {
+		const user = ordersStore.viewAddress ?? walletStore.address;
+		if (user) await ordersStore.refresh(user);
+	}
 
 	// Actions are only valid when the orders on screen belong to the connected
 	// wallet. A cancel/modify signed by the agent executes on the agent's master
@@ -84,6 +88,7 @@
 	}
 
 	async function cancelAll() {
+		if (ordersStore.loading || ordersStore.errors.length > 0) return;
 		if (!confirm(`Cancel all ${ordersStore.openOrders.length} open orders?`)) return;
 		const wallet = getAgentSigner();
 		if (!wallet) return;
@@ -182,10 +187,19 @@
 </script>
 
 <div class="flex flex-col">
+	{#if ordersStore.errors.length > 0}
+		<div role="alert" class="mx-3 my-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+			<p>Orders may be incomplete or stale. Refresh before using Cancel All.</p>
+			{#each ordersStore.errors as error (error)}
+				<p>{error}</p>
+			{/each}
+		</div>
+	{/if}
 	<div class="flex justify-end px-3 py-1">
+		<button class="text-xs px-3 py-1.5" onclick={retryOrders}>Refresh</button>
 		<button
 			class="text-xs px-3 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 font-semibold hover:bg-red-100 disabled:opacity-50"
-			disabled={!canAct || cancellingAll || ordersStore.openOrders.length === 0}
+			disabled={!canAct || cancellingAll || ordersStore.loading || ordersStore.errors.length > 0 || ordersStore.openOrders.length === 0}
 			title={canAct ? undefined : 'Only available when viewing your own connected wallet'}
 			onclick={cancelAll}
 		>
@@ -193,7 +207,9 @@
 		</button>
 	</div>
 	{#if ordersStore.openOrders.length === 0}
-		<div class="text-center py-8 text-sm text-gray-500">No open orders</div>
+		<div class="text-center py-8 text-sm text-gray-500">
+			{ordersStore.loading ? 'Loading orders…' : ordersStore.errors.length > 0 ? 'Orders unavailable or incomplete' : 'No open orders'}
+		</div>
 	{:else}
 		<!-- Single grid so header and rows align; Value = limitPx * sz (notional) -->
 		<div
@@ -208,7 +224,7 @@
 			<div class="py-1.5 text-[10px] text-gray-600 uppercase tracking-wider border-b border-border-secondary text-right">Time</div>
 			<div class="py-1.5 text-[10px] text-gray-600 uppercase tracking-wider border-b border-border-secondary text-right">Actions</div>
 
-			{#each ordersStore.openOrders as order (order.oid)}
+			{#each ordersStore.openOrders as order (`${order.coin}:${order.oid}`)}
 				{@const isBuy = order.side === 'B' || order.side === 'buy'}
 				{@const pp = marketStore.getCoinPriceParams(order.coin)}
 				{@const perp = marketStore.findPerpAsset(order.coin)}

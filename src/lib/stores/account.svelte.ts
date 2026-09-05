@@ -52,159 +52,200 @@ export interface SpotBalance {
 	entryNtl: string;
 }
 
-// Reactive state
-let viewAddress = $state<`0x${string}` | null>(null);
-let clearinghouse = $state<ClearinghouseState | null>(null);
-let spotBalances = $state<SpotBalance[]>([]);
+type User = `0x${string}`;
+interface AccountData {
+	dexStates: Record<string, ClearinghouseState>;
+	hasAllDexs: boolean;
+	spotBalances: SpotBalance[];
+	spotRaw: unknown;
+	webData3Raw: unknown;
+	errors: Record<string, string>;
+}
+interface AccountRecord {
+	user: User;
+	data: AccountData;
+	requests: Map<string, number>;
+	wsVersion: number;
+}
+interface ViewSession {
+	record: AccountRecord;
+	keys: Set<string>;
+}
+
+// Viewing B must never change the data consumed by a trading wallet A.
+let viewAddress = $state<User | null>(null);
 let loading = $state(false);
+let snapshots = $state<Record<string, AccountData>>({});
+const records = new Map<string, AccountRecord>();
+let viewSession: ViewSession | null = null;
 
-// Full WS payloads: no omission (all DEXs + webData3 raw)
-let allDexsClearinghouse = $state<[string, unknown][]>([]);
-let webData3Raw = $state<unknown>(null);
-
-// Raw REST response for spot (source of spot balances; structure may vary by asset)
-let spotClearinghouseStateRaw = $state<unknown>(null);
-
-// Per-dex clearinghouse states fetched via REST (HIP-3 margin display on
-// direct entry, before the all-dexs WS snapshot arrives).
-let dexClearinghouse = $state<Record<string, ClearinghouseState>>({});
-
-const positions = $derived(
-	clearinghouse?.assetPositions
-		.map((ap) => ap.position)
-		.filter((p) => parseFloat(p.szi) !== 0) ?? []
-);
-
-function extractPositions(state: unknown): Position[] {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const s = state as any;
-	const arr = Array.isArray(s?.assetPositions) ? s.assetPositions : [];
-	return arr
-		.map((ap: { position?: Position }) => ap?.position)
-		.filter((p: Position | undefined): p is Position => !!p && parseFloat(p.szi) !== 0);
+function accountKey(user: User) { return user.toLowerCase(); }
+function emptyData(): AccountData {
+	return { dexStates: {}, hasAllDexs: false, spotBalances: [], spotRaw: null, webData3Raw: null, errors: {} };
 }
 
-const perpDexPositionGroups = $derived.by((): PerpDexPositionsGroup[] => {
-	const fromWs = allDexsClearinghouse
-		.map(([dex, state]) => ({
-			dex,
-			label: dex === '' ? 'Main' : dex,
-			positions: extractPositions(state)
-		}))
-		.filter((g) => g.positions.length > 0)
-		.sort((a, b) => {
-			if (a.dex === '' && b.dex !== '') return -1;
-			if (a.dex !== '' && b.dex === '') return 1;
-			return a.label.localeCompare(b.label);
-		});
+function recordFor(user: User, fresh = false): AccountRecord {
+	const key = accountKey(user);
+	const existing = records.get(key);
+	if (!fresh && existing) return existing;
+	snapshots[key] = emptyData();
+	const requests = new Map<string, number>();
+	const record: AccountRecord = { user: key as User, data: snapshots[key], requests, wsVersion: 0 };
+	records.set(key, record);
+	return record;
+}
 
-	if (fromWs.length > 0) return fromWs;
-	if (positions.length > 0) {
-		return [{ dex: '', label: 'Main', positions }];
+function nextRequest(record: AccountRecord, key: string) {
+	const version = (record.requests.get(key) ?? 0) + 1;
+	record.requests.set(key, version);
+	return () => records.get(record.user) === record && record.requests.get(key) === version;
+}
+
+function report(record: AccountRecord, key: string, error?: unknown) {
+	if (records.get(record.user) !== record) return;
+	if (error == null) delete record.data.errors[key];
+	else record.data.errors[key] = `${key}: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+/** Read-only snapshot selector. It never changes viewAddress or starts requests. */
+function forAddress(user: User | null) {
+	const data = (user && snapshots[accountKey(user)]) || emptyData();
+	const clearinghouse = data.dexStates[''] ?? null;
+	const groups: PerpDexPositionsGroup[] = Object.entries(data.dexStates).map(([dex, state]) => ({
+		dex, label: dex || 'Main',
+		positions: (state.assetPositions ?? []).map((ap) => ap.position).filter((p) => Number(p.szi) !== 0)
+	})).filter((group) => group.positions.length > 0).sort((a, b) => {
+		if (!a.dex) return -1;
+		if (!b.dex) return 1;
+		return a.dex.localeCompare(b.dex);
+	});
+	return {
+		clearinghouse,
+		positions: groups.flatMap((group) => group.positions),
+		perpDexPositionGroups: groups,
+		marginSummary: clearinghouse?.marginSummary ?? null,
+		withdrawable: clearinghouse?.withdrawable ?? '0',
+		spotBalances: data.spotBalances.filter((balance) => Number(balance.total) !== 0),
+		spotBalancesFull: data.spotBalances,
+		allDexsClearinghouse: data.hasAllDexs ? Object.entries(data.dexStates) : [],
+		dexClearinghouse: data.dexStates,
+		webData3Raw: data.webData3Raw,
+		spotClearinghouseStateRaw: data.spotRaw,
+		errors: Object.values(data.errors)
+	};
+}
+
+const viewed = $derived(forAddress(viewAddress));
+
+async function loadDex(record: AccountRecord, dex: string, active = () => true) {
+	const key = `Margin (${dex || 'Main'})`;
+	const current = nextRequest(record, key);
+	const wsVersion = record.wsVersion;
+	try {
+		const state = await infoClient.clearinghouseState({ user: record.user, dex });
+		if (!active() || !current() || record.wsVersion !== wsVersion) return;
+		record.data.dexStates[dex] = state as unknown as ClearinghouseState;
+		report(record, key);
+	} catch (error) {
+		if (active() && current() && record.wsVersion === wsVersion) report(record, key, error);
 	}
-	return [];
-});
-
-// Full margin summary (includes isolated positions). crossMarginSummary would
-// systematically undercount account value for accounts with isolated margin.
-const marginSummary = $derived(clearinghouse?.marginSummary ?? null);
-const withdrawable = $derived(clearinghouse?.withdrawable ?? '0');
-
-// Non-zero spot balances only
-const activeSpotBalances = $derived(
-	spotBalances.filter((b) => parseFloat(b.total) !== 0)
-);
-
-// Fetch perp account state
-async function fetchAccountState(user: `0x${string}`) {
-	// Explicitly pin to main perp dex (empty string) for deterministic semantics.
-	const state = await infoClient.clearinghouseState({ user, dex: '' });
-	clearinghouse = state as unknown as ClearinghouseState;
 }
 
-// Fetch clearinghouse state for a specific HIP-3 dex
-async function fetchDexState(user: `0x${string}`, dex: string) {
-	const state = await infoClient.clearinghouseState({ user, dex });
-	dexClearinghouse = { ...dexClearinghouse, [dex]: state as unknown as ClearinghouseState };
+async function loadSpot(record: AccountRecord, active = () => true) {
+	const current = nextRequest(record, 'Spot balances');
+	try {
+		const result = await infoClient.spotClearinghouseState({ user: record.user });
+		if (!active() || !current()) return;
+		record.data.spotRaw = result;
+		record.data.spotBalances = result.balances as SpotBalance[];
+		report(record, 'Spot balances');
+	} catch (error) {
+		if (active() && current()) report(record, 'Spot balances', error);
+	}
 }
 
-// Fetch spot balances
-async function fetchSpotState(user: `0x${string}`) {
-	const result = await infoClient.spotClearinghouseState({ user });
-	spotClearinghouseStateRaw = result;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const data = result as any;
-	spotBalances = data?.balances ?? [];
+async function fetchAccountState(user: User) { await loadDex(recordFor(user), ''); }
+async function fetchDexState(user: User, dex: string) { await loadDex(recordFor(user), dex); }
+async function fetchSpotState(user: User) { await loadSpot(recordFor(user)); }
+
+async function cleanup(target: ViewSession) {
+	await Promise.allSettled([...target.keys].map((key) => unsubscribe(key)));
 }
 
-// Unsubscribe WS for an address (so we can switch to another)
-async function unsubscribeAccount(addr: `0x${string}`) {
-	await unsubscribe(`allDexsClearinghouseState:${addr}`);
-	await unsubscribe(`webData3:${addr}`);
-}
-
-// Shared: subscribe to allDexs + webData3 for a user (no wallet required)
-async function subscribeWsForUser(user: `0x${string}`) {
-	await subscribeAllDexsClearinghouseState(user, (data) => {
-		const states = data.clearinghouseStates ?? [];
-		allDexsClearinghouse = states;
-		// Only apply WS override from main dex (""). Never guess/fallback by index.
-		const mainTuple = states.find(([dex]) => dex === '');
-		if (mainTuple) {
-			const [, mainState] = mainTuple;
-			clearinghouse = mainState as ClearinghouseState;
-		}
-	});
-	await subscribeWebData3(user, (data) => {
-		webData3Raw = data;
-	});
-}
-
-// Load account for an address: REST + WS subscription (no wallet required)
-async function loadAddress(user: `0x${string}`) {
-	if (viewAddress) await unsubscribeAccount(viewAddress);
-	viewAddress = user;
-	loading = true;
-	await Promise.all([
-		fetchAccountState(user),
-		fetchSpotState(user)
-	]);
+async function unsubscribeAccount(user: User) {
+	if (viewSession?.record.user !== accountKey(user)) return;
+	const previous = viewSession;
+	viewSession = null;
 	loading = false;
-	await subscribeWsForUser(user);
+	await cleanup(previous);
+}
+
+// Only this explicit view action changes the selected address. Wallet data
+// fetches use the address-indexed cache above and cannot steal this selection.
+async function loadAddress(user: User) {
+	const previous = viewSession;
+	viewSession = null;
+	if (previous) void cleanup(previous);
+	const record = recordFor(user, true);
+	const target: ViewSession = { record, keys: new Set() };
+	viewSession = target;
+	viewAddress = record.user;
+	loading = true;
+	const active = () => viewSession === target && records.get(record.user) === record;
+	const rest = Promise.all([loadDex(record, '', active), loadSpot(record, active)]).finally(() => {
+		if (active()) loading = false;
+	});
+	target.keys.add(`allDexsClearinghouseState:${record.user}`);
+	target.keys.add(`webData3:${record.user}`);
+	const live = subscribeAllDexsClearinghouseState(record.user, (event) => {
+		if (!active() || event.user.toLowerCase() !== record.user) return;
+		++record.wsVersion;
+		// Full snapshot: missing/empty DEXes must not resurrect old REST positions.
+		record.data.dexStates = Object.fromEntries(event.clearinghouseStates ?? []) as Record<string, ClearinghouseState>;
+		record.data.hasAllDexs = true;
+		for (const key of Object.keys(record.data.errors)) {
+			if (key.startsWith('Margin (')) report(record, key);
+		}
+		report(record, 'Live account');
+	}, (error) => { if (active()) report(record, 'Live account', error); })
+		.catch((error) => { if (active()) report(record, 'Live account', error); });
+	const web = subscribeWebData3(record.user, (event) => {
+		if (!active()) return;
+		const owner = (event as { userState?: { user?: string } })?.userState?.user;
+		if (owner?.toLowerCase() !== record.user) return;
+		record.data.webData3Raw = event;
+		report(record, 'Account details');
+	}, (error) => { if (active()) report(record, 'Account details', error); })
+		.catch((error) => { if (active()) report(record, 'Account details', error); });
+	await Promise.all([rest, live, web]);
 }
 
 function reset() {
+	const previous = viewSession;
+	viewSession = null;
+	if (previous) void cleanup(previous);
 	viewAddress = null;
-	clearinghouse = null;
-	spotBalances = [];
 	loading = false;
-	allDexsClearinghouse = [];
-	webData3Raw = null;
-	spotClearinghouseStateRaw = null;
-	dexClearinghouse = {};
+	records.clear();
+	snapshots = {};
 }
 
 export const accountStore = {
 	get viewAddress() { return viewAddress; },
-	get clearinghouse() { return clearinghouse; },
-	get positions() { return positions; },
-	get perpDexPositionGroups() { return perpDexPositionGroups; },
-	get marginSummary() { return marginSummary; },
-	get withdrawable() { return withdrawable; },
-	get spotBalances() { return activeSpotBalances; },
-	/** All spot balances from API (including zero); each has coin, token, total, hold, entryNtl */
-	get spotBalancesFull() { return spotBalances; },
 	get loading() { return loading; },
-	get allDexsClearinghouse() { return allDexsClearinghouse; },
-	get webData3Raw() { return webData3Raw; },
-	get spotClearinghouseStateRaw() { return spotClearinghouseStateRaw; },
-	get dexClearinghouse() { return dexClearinghouse; },
-	loadAddress,
-	fetchAccountState,
-	fetchDexState,
-	fetchSpotState,
-	// Wallet-connect path is identical to viewing an address
+	get clearinghouse() { return viewed.clearinghouse; },
+	get positions() { return viewed.positions; },
+	get perpDexPositionGroups() { return viewed.perpDexPositionGroups; },
+	get marginSummary() { return viewed.marginSummary; },
+	get withdrawable() { return viewed.withdrawable; },
+	get spotBalances() { return viewed.spotBalances; },
+	get spotBalancesFull() { return viewed.spotBalancesFull; },
+	get allDexsClearinghouse() { return viewed.allDexsClearinghouse; },
+	get webData3Raw() { return viewed.webData3Raw; },
+	get spotClearinghouseStateRaw() { return viewed.spotClearinghouseStateRaw; },
+	get dexClearinghouse() { return viewed.dexClearinghouse; },
+	get errors() { return viewed.errors; },
+	forAddress, loadAddress, fetchAccountState, fetchDexState, fetchSpotState,
 	subscribeAccount: loadAddress,
-	unsubscribeAccount,
-	reset
+	unsubscribeAccount, reset
 };

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { accountStore } from '$stores/account.svelte';
 	import { ordersStore } from '$stores/orders.svelte';
@@ -21,7 +21,9 @@
 	// When landing on Orders with an address already set (e.g. from Portfolio), subscribe so we get real-time
 	$effect(() => {
 		const addr = accountStore.viewAddress;
-		if (addr && addr !== ordersStore.viewAddress) ordersStore.subscribeOrders(addr);
+		if (!addr) return;
+		untrack(() => { void ordersStore.subscribeOrders(addr); });
+		return () => { void ordersStore.unsubscribeOrders(addr); };
 	});
 
 	function loadMyOrders() {
@@ -29,7 +31,7 @@
 		if (!addr) return;
 		pushAddressHistory(addr);
 		accountStore.loadAddress(addr);
-		ordersStore.subscribeOrders(addr);
+		void ordersStore.refresh(addr);
 	}
 </script>
 
@@ -43,7 +45,7 @@
 			currentViewAddress={accountStore.viewAddress}
 			onView={(addr) => {
 				accountStore.loadAddress(addr);
-				ordersStore.subscribeOrders(addr);
+				void ordersStore.refresh(addr);
 			}}
 			loading={accountStore.loading || ordersStore.loading}
 		/>
@@ -74,6 +76,12 @@
 
 		<!-- Tab content -->
 		<div class="flex-1 overflow-y-auto">
+			{#if activeTab !== 'open' && ordersStore.errors.length > 0}
+				<div role="alert" class="m-3 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+					<p>Some account data could not be loaded. Use View to retry.</p>
+					{#each ordersStore.errors as error (error)}<p>{error}</p>{/each}
+				</div>
+			{/if}
 			{#if activeTab === 'open'}
 				<OpenOrders />
 			{:else if activeTab === 'fills'}

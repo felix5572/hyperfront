@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { accountStore } from '$stores/account.svelte';
 	import { marketStore } from '$stores/market.svelte';
@@ -9,18 +9,14 @@
 	import SpotBalances from '$components/portfolio/SpotBalances.svelte';
 	import { formatUsd } from '$utils/format';
 
-	let subscribedUser: `0x${string}` | null = null;
 	let lastAddressFromQuery = $state<`0x${string}` | null>(null);
 
-	// When wallet connects, subscribe for real-time updates
+	// A wallet is only the initial default. Reconnects/account changes must not
+	// replace an explicitly selected read-only address or an address deep link.
 	$effect(() => {
 		const addr = walletStore.address;
-		if (addr && addr !== subscribedUser) {
-			subscribedUser = addr;
-			accountStore.subscribeAccount(addr);
-		} else if (!addr && subscribedUser) {
-			accountStore.unsubscribeAccount(subscribedUser);
-			subscribedUser = null;
+		if (addr && !accountStore.viewAddress && !page.url.searchParams.get('address')) {
+			untrack(() => { void accountStore.loadAddress(addr); });
 		}
 	});
 
@@ -38,7 +34,7 @@
 		const addr = q as `0x${string}`;
 		if (addr === lastAddressFromQuery || addr === accountStore.viewAddress) return;
 		lastAddressFromQuery = addr;
-		void accountStore.loadAddress(addr);
+		untrack(() => { void accountStore.loadAddress(addr); });
 	});
 
 	onDestroy(() => {
@@ -102,6 +98,12 @@
 		showConnectWallet
 		currentViewAddress={accountStore.viewAddress}
 	/>
+	{#if accountStore.errors.length > 0}
+		<div role="alert" class="m-3 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+			<p>Account data may be incomplete or stale. Use View to retry.</p>
+			{#each accountStore.errors as error (error)}<p>{error}</p>{/each}
+		</div>
+	{/if}
 
 	{#if accountStore.loading}
 		<div class="flex-1 flex items-center justify-center">

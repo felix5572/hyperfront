@@ -16,6 +16,9 @@ interface SubscriptionStatus {
 
 // Active subscription registry for cleanup
 const activeSubscriptions: Map<string, Subscription> = new Map();
+// A subscription can still be awaiting its SDK handle when a route unmounts
+// or starts a replacement. Invalidating the token also cancels that late handle.
+const pendingSubscriptions = new Map<string, object>();
 export const subscriptionError = writable<string | null>(null);
 const userSpecificPrefixes = ['orderUpdates', 'openOrders', 'userFills', 'webData2', 'webData3', 'allDexsClearinghouseState'];
 
@@ -51,43 +54,65 @@ function refreshStatus(lastError: string | null = null) {
 // Subscribe with automatic tracking and cleanup
 async function subscribe(
 	key: string,
-	subscribeFn: () => Promise<Subscription>
+	subscribeFn: () => Promise<Subscription>,
+	onFailure?: (error: Error) => void
 ): Promise<void> {
 	subscriptionError.set(null);
-	// Unsubscribe existing subscription with same key
-	await unsubscribe(key);
-
-	const sub = await subscribeFn();
-	activeSubscriptions.set(key, sub);
+	const token = {};
+	const existing = activeSubscriptions.get(key);
+	activeSubscriptions.delete(key);
+	pendingSubscriptions.set(key, token);
 	refreshStatus();
+	try {
+		if (existing) await existing.unsubscribe();
+		if (pendingSubscriptions.get(key) !== token) return;
+		const sub = await subscribeFn();
+		if (pendingSubscriptions.get(key) !== token) {
+			await sub.unsubscribe();
+			return;
+		}
+		pendingSubscriptions.delete(key);
+		activeSubscriptions.set(key, sub);
+		refreshStatus();
 
-	// Auto-remove on failure
-	sub.failureSignal.addEventListener('abort', () => {
-		activeSubscriptions.delete(key);
-		const reason = sub.failureSignal.reason instanceof Error
-			? sub.failureSignal.reason.message
-			: String(sub.failureSignal.reason ?? 'Unknown websocket failure');
-		const message = `Subscription "${key}" failed: ${reason}`;
-		subscriptionError.set(message);
-		refreshStatus(message);
-		console.error(message);
-	});
+		const handleFailure = () => {
+			// A delayed abort from a replaced handle must not delete its successor.
+			if (activeSubscriptions.get(key) !== sub) return;
+			activeSubscriptions.delete(key);
+			const reason = sub.failureSignal.reason instanceof Error
+				? sub.failureSignal.reason.message
+				: String(sub.failureSignal.reason ?? 'Unknown websocket failure');
+			const message = `Subscription "${key}" failed: ${reason}`;
+			subscriptionError.set(message);
+			refreshStatus(message);
+			onFailure?.(new Error(message));
+			console.error(message);
+		};
+		sub.failureSignal.addEventListener('abort', handleFailure, { once: true });
+		if (sub.failureSignal.aborted) handleFailure();
+	} catch (error) {
+		if (pendingSubscriptions.get(key) !== token) return;
+		pendingSubscriptions.delete(key);
+		throw error;
+	}
 }
 
 async function unsubscribe(key: string): Promise<void> {
+	pendingSubscriptions.delete(key);
 	const existing = activeSubscriptions.get(key);
+	activeSubscriptions.delete(key);
+	refreshStatus();
 	if (existing) {
 		await existing.unsubscribe();
-		activeSubscriptions.delete(key);
-		refreshStatus();
 	}
 }
 
 async function unsubscribeAll(): Promise<void> {
-	const promises = [...activeSubscriptions.entries()].map(([key, sub]) => {
-		activeSubscriptions.delete(key);
-		return sub.unsubscribe();
-	});
+	pendingSubscriptions.clear();
+	const subscriptions = [...activeSubscriptions.values()];
+	activeSubscriptions.clear();
+	refreshStatus();
+	const promises = subscriptions.map((sub) => sub.unsubscribe());
 	await Promise.allSettled(promises);
 	refreshStatus();
 }
@@ -96,10 +121,11 @@ async function unsubscribeAll(): Promise<void> {
 
 export async function subscribeL2Book(
 	coin: string,
-	callback: (data: { coin: string; levels: [Array<{ px: string; sz: string; n: number }>, Array<{ px: string; sz: string; n: number }>]; time: number }) => void
+	callback: (data: { coin: string; levels: [Array<{ px: string; sz: string; n: number }>, Array<{ px: string; sz: string; n: number }>]; time: number }) => void,
+	onFailure?: (error: Error) => void
 ): Promise<void> {
 	await subscribe(`l2Book:${coin}`, () =>
-		subscriptionClient.l2Book({ coin }, callback)
+		subscriptionClient.l2Book({ coin }, callback), onFailure
 	);
 }
 
@@ -154,19 +180,21 @@ export async function subscribeOrderUpdates(
 export async function subscribeOpenOrders(
 	user: `0x${string}`,
 	callback: (data: { dex: string; user: `0x${string}`; orders: unknown[] }) => void,
-	dex = ''
+	dex = '',
+	onFailure?: (error: Error) => void
 ): Promise<void> {
 	await subscribe(`openOrders:${user}:${dex}`, () =>
-		subscriptionClient.openOrders({ user, dex }, callback)
+		subscriptionClient.openOrders({ user, dex }, callback), onFailure
 	);
 }
 
 export async function subscribeUserFills(
 	user: `0x${string}`,
-	callback: (data: unknown) => void
+	callback: (data: unknown) => void,
+	onFailure?: (error: Error) => void
 ): Promise<void> {
 	await subscribe(`userFills:${user}`, () =>
-		subscriptionClient.userFills({ user }, callback)
+		subscriptionClient.userFills({ user }, callback), onFailure
 	);
 }
 
@@ -182,20 +210,22 @@ export async function subscribeWebData2(
 /** Subscribe to all DEXs clearinghouse state (perp positions + margin). Use this for Portfolio real-time updates. */
 export async function subscribeAllDexsClearinghouseState(
 	user: `0x${string}`,
-	callback: (data: { user: string; clearinghouseStates: [string, unknown][] }) => void
+	callback: (data: { user: string; clearinghouseStates: [string, unknown][] }) => void,
+	onFailure?: (error: Error) => void
 ): Promise<void> {
 	await subscribe(`allDexsClearinghouseState:${user}`, () =>
-		subscriptionClient.allDexsClearinghouseState({ user }, callback)
+		subscriptionClient.allDexsClearinghouseState({ user }, callback), onFailure
 	);
 }
 
 /** Subscribe to webData3 (userState, perpDexStates, and any undocumented fields). Store full payload. */
 export async function subscribeWebData3(
 	user: `0x${string}`,
-	callback: (data: unknown) => void
+	callback: (data: unknown) => void,
+	onFailure?: (error: Error) => void
 ): Promise<void> {
 	await subscribe(`webData3:${user}`, () =>
-		subscriptionClient.webData3({ user }, (d) => callback(d))
+		subscriptionClient.webData3({ user }, (d) => callback(d)), onFailure
 	);
 }
 

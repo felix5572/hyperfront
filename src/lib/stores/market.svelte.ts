@@ -1,5 +1,6 @@
-import { infoClient } from '$api/client';
+import { infoClient, observeConnection } from '$api/client';
 import { VISIBLE_HIP3_DEX_NAMES } from '$utils/constants';
+import { isFreshQuote, quoteFromBook, type TradeQuote } from '$utils/orderSafety';
 import {
 	subscribeL2Book,
 	subscribeTrades,
@@ -145,6 +146,12 @@ let midsInitialized = $state(false);
 
 // Coin detail state
 let selectedCoin = $state('BTC');
+let coinSelectionVersion = 0;
+let quoteGeneration = 0;
+let tradeQuote = $state<TradeQuote | null>(null);
+let quoteConnected = $state(false);
+let quoteStreamHealthy = true;
+let stopConnectionObserver: (() => void) | null = null;
 let bids = $state<BookLevel[]>([]);
 let asks = $state<BookLevel[]>([]);
 let recentTrades = $state<Trade[]>([]);
@@ -370,31 +377,60 @@ async function initMids() {
 
 // Select a coin and subscribe to its L2 book + trades
 async function selectCoin(coin: string) {
-	await unsubscribe(`l2Book:${selectedCoin}`);
-	await unsubscribe(`trades:${selectedCoin}`);
-
+	const version = ++coinSelectionVersion;
+	stopConnectionObserver?.();
+	stopConnectionObserver = null;
+	tradeQuote = null;
+	quoteConnected = false;
+	quoteStreamHealthy = true;
+	++quoteGeneration;
+	const previous = selectedCoin;
 	selectedCoin = coin;
 	bids = [];
 	asks = [];
 	recentTrades = [];
-
-	await subscribeL2Book(coin, (data) => {
-		bids = data.levels[0];
-		asks = data.levels[1];
+	await Promise.all([unsubscribe(`l2Book:${previous}`), unsubscribe(`trades:${previous}`)]);
+	if (version !== coinSelectionVersion) return;
+	stopConnectionObserver = observeConnection((connected) => {
+		if (version !== coinSelectionVersion) return;
+		quoteConnected = connected;
+		tradeQuote = null;
+		++quoteGeneration; // Invalidate confirmations even if reconnection is quick.
 	});
 
-	await subscribeTrades(coin, (data) => {
-		recentTrades = [...data, ...recentTrades].slice(0, 100);
-	});
+	await Promise.all([
+		subscribeL2Book(coin, (data) => {
+			if (version !== coinSelectionVersion || data.coin !== coin) return;
+			bids = data.levels[0];
+			asks = data.levels[1];
+			tradeQuote = quoteConnected && quoteStreamHealthy ? quoteFromBook(data, quoteGeneration) : null;
+		}, () => {
+			if (version !== coinSelectionVersion) return;
+			quoteStreamHealthy = false;
+			tradeQuote = null;
+		}).catch((error) => {
+			if (version === coinSelectionVersion) { quoteStreamHealthy = false; tradeQuote = null; }
+			throw error;
+		}),
+		subscribeTrades(coin, (data) => {
+			if (version !== coinSelectionVersion) return;
+			recentTrades = [...data, ...recentTrades].slice(0, 100);
+		})
+	]);
 }
 
 // Unsubscribe from coin detail streams
-async function unselectCoin() {
-	await unsubscribe(`l2Book:${selectedCoin}`);
-	await unsubscribe(`trades:${selectedCoin}`);
+async function unselectCoin(coin = selectedCoin) {
+	if (coin !== selectedCoin) return;
+	++coinSelectionVersion;
+	stopConnectionObserver?.();
+	stopConnectionObserver = null;
+	tradeQuote = null;
+	quoteConnected = false;
 	bids = [];
 	asks = [];
 	recentTrades = [];
+	await Promise.all([unsubscribe(`l2Book:${coin}`), unsubscribe(`trades:${coin}`)]);
 }
 
 // Initialize market overview (list page)
@@ -427,6 +463,7 @@ function setSearch(query: string) {
 }
 
 function reset() {
+	tradeQuote = null;
 	bids = [];
 	asks = [];
 	recentTrades = [];
@@ -549,6 +586,8 @@ export const marketStore = {
 
 	// HIP-3
 	get hip3Dexes() { return hip3Dexes; },
+	// Account data must not apply the market overview's visibility filter.
+	get allHip3Dexes() { return allHip3Dexes; },
 	get activeHip3Dex() { return activeHip3Dex; },
 	get hip3Assets() { return hip3Assets; },
 	get filteredHip3Assets() { return filteredHip3Assets; },
@@ -564,6 +603,10 @@ export const marketStore = {
 	get asks() { return asks; },
 	get recentTrades() { return recentTrades; },
 	get midPrice() { return midPrice; },
+	// The only price accessor approved for preparing/confirming market orders.
+	getTradeQuote(coin: string, now = Date.now()): TradeQuote | null {
+		return quoteConnected && isFreshQuote(tradeQuote, coin, now) ? tradeQuote : null;
+	},
 
 	// Functions
 	setTab,

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onMount, onDestroy } from 'svelte';
+	import { untrack } from 'svelte';
 	import { marketStore, type AssetCtx } from '$stores/market.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
 	import { ordersStore } from '$stores/orders.svelte';
@@ -19,6 +19,7 @@
 	const coin = $derived(decodeURIComponent(page.params.coin ?? ''));
 
 	let liveCtx = $state<AssetCtx | null>(null);
+	let liveCtxCoin = $state('');
 	let wsError = $state<string | null>(null);
 	let ordersExpanded = $state(false);
 	let ordersTab = $state<'open' | 'history'>('open');
@@ -34,7 +35,7 @@
 		(spotAsset?.ctx as unknown as AssetCtx) ??
 		null
 	);
-	const ctx = $derived(liveCtx ?? staticCtx);
+	const ctx = $derived(liveCtxCoin === coin ? liveCtx ?? staticCtx : staticCtx);
 
 	// Resolve human-readable display name (avoid showing raw "@1" as title)
 	const displayName = $derived(
@@ -76,84 +77,55 @@
 	const change24h = $derived(prev > 0 ? ((mark - prev) / prev) * 100 : 0);
 	const isPositive = $derived(change24h >= 0);
 
-	let subscribedUser: `0x${string}` | null = null;
-	let activeCoin = $state('');
-	let switchingCoin = $state(false);
-	// Latest coin requested while a switch was in flight — processed when the
-	// current switch finishes (last-wins), instead of being silently dropped.
-	let queuedCoin: string | null = null;
 	let coinSwitchSeq = 0;
 
-	async function switchCoin(nextCoin: string) {
-		if (!nextCoin || nextCoin === activeCoin) return;
-		if (switchingCoin) {
-			queuedCoin = nextCoin;
-			return;
-		}
-		switchingCoin = true;
-		const seq = ++coinSwitchSeq;
+	async function switchCoin(nextCoin: string, seq: number) {
 		try {
-			// Unsubscribe old coin-specific stream before switching
-			if (activeCoin) {
-				await unsubscribe(`activeAssetCtx:${activeCoin}`);
-			}
-
+			await marketStore.initMarketList();
+			if (seq !== coinSwitchSeq) return;
 			// Resolve direct HIP-3 links (including archived positions/history)
 			// without changing the market overview's selected DEX.
 			if (nextCoin.includes(':') && !marketStore.findPerpAsset(nextCoin)) {
 				await marketStore.prefetchHip3Meta([nextCoin]);
 			}
-
+			if (seq !== coinSwitchSeq) return;
 			await marketStore.selectCoin(nextCoin);
+			if (seq !== coinSwitchSeq) return;
 			await subscribeActiveAssetCtx(nextCoin, (data: unknown) => {
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				const d = data as any;
 				// Ignore late updates from stale async switches
 				if (seq !== coinSwitchSeq) return;
-				if (d?.ctx) liveCtx = d.ctx as AssetCtx;
+				if (d?.ctx) {
+					liveCtxCoin = nextCoin;
+					liveCtx = d.ctx as AssetCtx;
+				}
 			});
-			activeCoin = nextCoin;
-		} finally {
-			switchingCoin = false;
-		}
-		const pending = queuedCoin;
-		queuedCoin = null;
-		if (pending && pending !== activeCoin) {
-			await switchCoin(pending);
+		} catch (e) {
+			if (seq === coinSwitchSeq) wsError = e instanceof Error ? e.message : String(e);
 		}
 	}
 
-	onMount(async () => {
-		try {
-			if (marketStore.perpAssets.length === 0) {
-				await marketStore.initMarketList();
-			}
-			await switchCoin(coin);
-
-			// Subscribe to orders if wallet connected
-			if (walletStore.address) {
-				subscribedUser = walletStore.address;
-				await ordersStore.subscribeOrders(subscribedUser);
-			}
-		} catch (e) {
-			wsError = e instanceof Error ? e.message : String(e);
-		}
-	});
-
-	onDestroy(() => {
-		void marketStore.unselectCoin();
-		if (activeCoin) {
-			void unsubscribe(`activeAssetCtx:${activeCoin}`);
-		}
-		if (subscribedUser) {
-			void ordersStore.unsubscribeOrders(subscribedUser);
-		}
+	// Wallet reconnect/switch may happen after the page mounts.
+	$effect(() => {
+		const user = walletStore.address;
+		if (!user) return;
+		untrack(() => { void ordersStore.subscribeOrders(user); });
+		return () => { void ordersStore.unsubscribeOrders(user); };
 	});
 
 	$effect(() => {
 		const c = coin;
 		if (!c) return;
-		void switchCoin(c);
+		const seq = ++coinSwitchSeq;
+		liveCtx = null;
+		wsError = null;
+		untrack(() => { void switchCoin(c, seq); });
+		return () => {
+			++coinSwitchSeq;
+			void unsubscribe(`activeAssetCtx:${c}`);
+			void marketStore.unselectCoin(c);
+		};
 	});
 
 	$effect(() => {

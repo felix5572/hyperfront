@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount, untrack } from 'svelte';
 	import { marketStore } from "$stores/market.svelte";
 	import { accountStore } from "$stores/account.svelte";
 	import { walletStore } from "$stores/wallet.svelte";
@@ -10,7 +11,7 @@
 		formatUsd,
 		tickSize,
 	} from "$utils/format";
-	import { createHlWalletAdapter } from "$lib/wallet/hlWalletAdapter";
+	import { confirmationError, sameOrderContext, type OrderContext, type TradeQuote } from '$utils/orderSafety';
 	import { placeOrder as apiPlaceOrder } from "$lib/api/exchange";
 	import type { Tif } from "$lib/api/exchange";
 
@@ -34,10 +35,11 @@
 	let showTifHelp = $state(false);
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
-	let accountLoadedFor = $state<`0x${string}` | null>(null);
-	let lastCoin = $state("");
+	let preparing = $state(false);
+	let validationVersion = 0;
+	let now = $state(Date.now());
 
-	type ConfirmDetails = {
+	type ConfirmDetails = OrderContext & {
 		side: "buy" | "sell";
 		orderType: "market" | "limit";
 		priceStr: string;
@@ -46,22 +48,31 @@
 		estimatedValue: number | null;
 		tif?: Tif;
 		asset: number;
+		reduceOnly: boolean;
+		quote: TradeQuote | null;
 	};
 	let showConfirm = $state(false);
 	let pendingOrder = $state<ConfirmDetails | null>(null);
 
 	const isBuy = $derived(side === "buy");
+	const tradingAccount = $derived(accountStore.forAddress(walletStore.address));
 	const spotAsset = $derived(
 		isSpot ? marketStore.findSpotAsset(coin) : undefined,
 	);
 	const perpAsset = $derived(!isSpot ? marketStore.findPerpAsset(coin) : undefined);
-	// Always scope mid price to the current coin to avoid cross-coin leakage
-	// from global selectedCoin races during route transitions.
-	const midPx = $derived(
-		marketStore.allMids[coin] ??
-			(isSpot ? spotAsset?.ctx?.midPx : perpAsset?.ctx?.midPx) ??
-			null,
-	);
+	// Trading references must be fresh two-sided book quotes, including HIP-3.
+	const liveQuote = $derived(marketStore.getTradeQuote(coin, Math.max(now, Date.now())));
+	const midPx = $derived(liveQuote?.midPx ?? null);
+	const draftKey = $derived(JSON.stringify([side, orderType, priceInput, sizeInput, sizeAsset, reduceOnly, tif]));
+	function currentContext(): OrderContext {
+		return { coin, isSpot, account: walletStore.isConnected ? walletStore.address : null,
+			walletClient: walletStore.isConnected ? walletStore.walletClient : null };
+	}
+	const confirmIssue = $derived(pendingOrder ? confirmationError(pendingOrder, currentContext(), liveQuote, Math.max(now, Date.now())) : null);
+	onMount(() => {
+		const timer = setInterval(() => { now = Date.now(); }, 1000);
+		return () => { clearInterval(timer); ++validationVersion; };
+	});
 	const baseAssetName = $derived(
 		isSpot ? (spotAsset?.token.name ?? coin) : coin,
 	);
@@ -76,13 +87,13 @@
 	const baseBalance = $derived(
 		isSpot
 			? parseFloat(
-					accountStore.spotBalancesFull.find(
+					tradingAccount.spotBalancesFull.find(
 						(b) => b.coin === baseAssetName,
 					)?.total ?? "0",
 				)
 			: Math.abs(
 					parseFloat(
-						accountStore.positions.find((p) => p.coin === coin)
+						tradingAccount.positions.find((p) => p.coin === coin)
 							?.szi ?? "0",
 					),
 				),
@@ -94,12 +105,12 @@
 	const hip3DexName = $derived(isHip3 ? coin.split(":")[0] : null);
 	const hip3Withdrawable = $derived.by((): number | null => {
 		if (!hip3DexName) return null;
-		const tuple = accountStore.allDexsClearinghouse.find(
+		const tuple = tradingAccount.allDexsClearinghouse.find(
 			([dex]) => dex === hip3DexName,
 		);
 		const state = tuple
 			? (tuple[1] as { withdrawable?: string })
-			: accountStore.dexClearinghouse[hip3DexName];
+			: tradingAccount.dexClearinghouse[hip3DexName];
 		if (!state) return null;
 		const value = parseFloat(state.withdrawable ?? "");
 		return Number.isFinite(value) ? value : null;
@@ -107,17 +118,17 @@
 	const quoteBalance = $derived(
 		isSpot
 			? parseFloat(
-					accountStore.spotBalancesFull.find(
+					tradingAccount.spotBalancesFull.find(
 						(b) => b.coin === quoteAssetName,
 					)?.total ?? "0",
 				)
 			: isHip3
 				? (hip3Withdrawable ?? 0)
-				: parseFloat(accountStore.withdrawable ?? "0"),
+				: parseFloat(tradingAccount.withdrawable ?? "0"),
 	);
 	const usdcBalance = $derived(
 		parseFloat(
-			accountStore.spotBalancesFull.find((b) => b.coin === "USDC")
+			tradingAccount.spotBalancesFull.find((b) => b.coin === "USDC")
 				?.total ?? "0",
 		),
 	);
@@ -163,7 +174,7 @@
 	// Current position info (perp mode only)
 	const currentPosition = $derived(
 		!isSpot
-			? (accountStore.positions.find((p) => p.coin === coin) ?? null)
+			? (tradingAccount.positions.find((p) => p.coin === coin) ?? null)
 			: null,
 	);
 	const positionSzi = $derived(
@@ -240,87 +251,69 @@
 
 	// Validate and show confirmation modal
 	async function submitOrder() {
+		if (preparing || submitting) return;
 		submitError = null;
-		if (
-			!walletStore.isConnected ||
-			!walletStore.walletClient ||
-			!walletStore.address
-		) {
+		const context = currentContext();
+		if (!context.account || !context.walletClient) {
 			submitError = "Connect wallet first";
 			return;
 		}
-		let asset: number | null;
+		const version = ++validationVersion;
+		const key = draftKey;
+		const draft = { side, orderType, price: priceInput.trim(), amount: sizeInput.trim(), sizeAsset, reduceOnly, tif };
+		preparing = true;
 		try {
-			asset = await marketStore.resolveAssetId(coin);
+			const asset = await marketStore.resolveAssetId(context.coin);
+			if (version !== validationVersion) return;
+			if (!sameOrderContext(context, currentContext()) || key !== draftKey) {
+				throw new Error('Wallet, market, or inputs changed. Review the order again.');
+			}
+			if (asset == null) throw new Error(`Unknown asset: ${context.coin}`);
+			// Recheck after metadata resolution, which may have taken longer than the quote TTL.
+			const quote = marketStore.getTradeQuote(context.coin);
+			if (draft.orderType === 'market' && !quote) throw new Error('Fresh two-sided market quote unavailable. Wait for the feed or refresh it.');
+			const price = draft.orderType === 'market' ? Number(quote!.midPx) : Number(draft.price);
+			if (!Number.isFinite(price) || price <= 0) throw new Error('Enter a valid price');
+			const amount = Number(draft.amount);
+			const baseSize = draft.sizeAsset === 'quote' ? amount / price : amount;
+			if (!Number.isFinite(baseSize) || baseSize <= 0) throw new Error('Enter a valid size');
+			const sizeStr = formatSize(baseSize, Math.max(0, szDecimals));
+			if (Number(sizeStr) <= 0) throw new Error('Size is below the asset precision');
+			const agentCheck = agentStore.requireSigner(context.account as `0x${string}`);
+			if ('error' in agentCheck) {
+				agentStore.modalOpen = true;
+				throw new Error(agentCheck.error);
+			}
+			pendingOrder = {
+				...context, side: draft.side, orderType: draft.orderType, asset,
+				priceStr: draft.orderType === 'market'
+					? formatPrice(price * (draft.side === 'buy' ? 1.03 : 0.97), szDecimals, context.isSpot)
+					: draft.price,
+				sizeStr, midPxSnapshot: quote?.midPx ?? '', estimatedValue: Number(sizeStr) * price,
+				tif: draft.orderType === 'limit' ? draft.tif : undefined,
+				reduceOnly: context.isSpot ? false : draft.reduceOnly, quote
+			};
+			showConfirm = true;
 		} catch (e) {
-			submitError = e instanceof Error ? e.message : String(e);
-			return;
+			if (version === validationVersion) submitError = e instanceof Error ? e.message : String(e);
+		} finally {
+			if (version === validationVersion) preparing = false;
 		}
-		if (asset == null) {
-			submitError = `Unknown asset: ${coin}`;
-			return;
-		}
-		const baseSize = effectiveBaseSize;
-		if (
-			typeof baseSize !== "number" ||
-			!Number.isFinite(baseSize) ||
-			baseSize <= 0
-		) {
-			submitError = "Enter a valid size";
-			return;
-		}
-		const sizeStr = formatSize(baseSize, Math.max(0, szDecimals));
-		const midNum = parseFloat(midPx ?? "");
-		if (orderType === "limit") {
-			const priceNum = parseFloat(priceInput.trim());
-			if (isNaN(priceNum) || priceNum <= 0) {
-				submitError = "Enter a valid price";
-				return;
-			}
-		} else {
-			if (!midPx || !Number.isFinite(midNum) || midNum <= 0) {
-				submitError = "Mid price not available for market order";
-				return;
-			}
-		}
-		const agentCheck = agentStore.requireSigner(walletStore.address);
-		if ("error" in agentCheck) {
-			submitError = agentCheck.error;
-			agentStore.modalOpen = true;
-			return;
-		}
-		// Market order: use mid ± 3% slippage as worst-acceptable price
-		const slippagePrice =
-			orderType === "market"
-				? formatPrice(
-						midNum * (side === "buy" ? 1.03 : 0.97),
-						szDecimals,
-						isSpot,
-					)
-				: priceInput.trim();
-
-		// Snapshot mid price at validation time
-		const midPxSnapshot = midPx ?? "";
-
-		pendingOrder = {
-			side,
-			orderType,
-			priceStr: slippagePrice,
-			sizeStr,
-			midPxSnapshot,
-			estimatedValue: estimatedQuoteValue,
-			tif: orderType === "limit" ? tif : undefined,
-			asset,
-		};
-		showConfirm = true;
 	}
 
 	// Actually execute the order after confirmation
 	async function executeOrder() {
-		if (!pendingOrder) return;
+		if (!pendingOrder || submitting) return;
+		const order = pendingOrder;
+		const issue = confirmationError(order, currentContext(), marketStore.getTradeQuote(order.coin));
+		if (issue) {
+			submitError = issue;
+			closeConfirm();
+			return;
+		}
 		// Re-validate at confirm time: the wallet account or agent approval may
 		// have changed while the confirm dialog was open.
-		const agentCheck = agentStore.requireSigner(walletStore.address);
+		const agentCheck = agentStore.requireSigner(order.account as `0x${string}`);
 		if ("error" in agentCheck) {
 			feedbackStore.error("Order Failed", agentCheck.error);
 			closeConfirm();
@@ -331,14 +324,9 @@
 		submitting = true;
 		try {
 			const result = await apiPlaceOrder(wallet, {
-				asset: pendingOrder.asset,
-				side: pendingOrder.side,
-				orderType: pendingOrder.orderType,
-				price: pendingOrder.priceStr,
-				size: pendingOrder.sizeStr,
-				// reduceOnly is a perp concept; never send it for spot
-				reduceOnly: isSpot ? false : reduceOnly,
-				tif: pendingOrder.tif,
+				asset: order.asset, side: order.side, orderType: order.orderType,
+				price: order.priceStr, size: order.sizeStr,
+				reduceOnly: order.reduceOnly, tif: order.tif,
 			});
 			const first = result.statuses[0];
 			if (first && typeof first === "object" && "error" in first) {
@@ -350,7 +338,7 @@
 				return;
 			}
 			feedbackStore.success(
-				`${pendingOrder.side === "buy" ? "Buy" : "Sell"} ${coin} order placed`,
+				`${order.side === "buy" ? "Buy" : "Sell"} ${order.coin} order placed`,
 			);
 			closeConfirm();
 		} catch (e) {
@@ -366,10 +354,7 @@
 
 	function closeConfirm() {
 		showConfirm = false;
-		// Delay clearing pendingOrder to avoid flash during close animation
-		setTimeout(() => {
-			pendingOrder = null;
-		}, 150);
+		pendingOrder = null;
 	}
 
 	$effect(() => {
@@ -379,24 +364,28 @@
 	});
 
 	$effect(() => {
-		if (coin === lastCoin) return;
-		lastCoin = coin;
-		sizeInput = "";
-		allocationPct = 0;
-		priceEdited = false;
-		if (orderType === "limit" && midPx) {
-			priceInput = formatPrice(midPx, szDecimals, isSpot);
-		}
+		// Read only identity dependencies; quote ticks must not reset user input.
+		currentContext();
+		untrack(() => {
+			++validationVersion;
+			preparing = false;
+			closeConfirm();
+			sizeInput = '';
+			allocationPct = 0;
+			priceEdited = false;
+			priceInput = '';
+			submitError = null;
+		});
 	});
 
 	$effect(() => {
 		const addr = walletStore.address;
-		if (!addr || addr === accountLoadedFor) return;
-		accountLoadedFor = addr;
-		void Promise.all([
+		const client = walletStore.walletClient;
+		if (!addr || !client) return;
+		untrack(() => { void Promise.all([
 			accountStore.fetchAccountState(addr),
 			accountStore.fetchSpotState(addr),
-		]);
+		]); });
 	});
 
 	// HIP-3: fetch the dex-specific clearinghouse state for margin display
@@ -404,9 +393,9 @@
 		const addr = walletStore.address;
 		const dexName = hip3DexName;
 		if (!addr || !dexName) return;
-		accountStore
+		untrack(() => { void accountStore
 			.fetchDexState(addr, dexName)
-			.catch((e) => console.error(`fetchDexState(${dexName}) failed:`, e));
+			.catch((e) => console.error(`fetchDexState(${dexName}) failed:`, e)); });
 	});
 
 	$effect(() => {
@@ -417,6 +406,18 @@
 </script>
 
 <div class="p-2 space-y-2">
+	<div class="flex items-center justify-between text-[10px] text-gray-500">
+		<span>{liveQuote ? 'Live book mid' : 'Live quote unavailable / stale'}{liveQuote ? ` · ${Math.max(0, Math.floor((now - liveQuote.receivedAt) / 1000))}s` : ''}</span>
+		<button onclick={() => { void marketStore.selectCoin(coin).catch((e) => { submitError = String(e); }); }}>Refresh feed</button>
+	</div>
+	{#if orderType === 'market' && !liveQuote}
+		<p class="text-xs text-amber-700">Market orders need a two-sided book updated within 15 seconds. Cached prices are not used.</p>
+	{/if}
+	{#if tradingAccount.errors.length > 0}
+		<div role="alert" class="text-xs text-amber-700">
+			{#each tradingAccount.errors as error (error)}<p>{error}</p>{/each}
+		</div>
+	{/if}
 	<!-- Buy / Sell toggle -->
 	<div class="flex rounded-lg overflow-hidden border border-border-primary">
 		<button
@@ -689,7 +690,7 @@
 		class="w-full py-2.5 rounded-lg text-xs font-semibold transition-colors {isBuy
 			? 'bg-long hover:bg-long/90'
 			: 'bg-short hover:bg-short/90'} text-white disabled:opacity-40"
-		disabled={!walletStore.isConnected || submitting}
+		disabled={!walletStore.isConnected || submitting || preparing || (orderType === 'market' && !liveQuote)}
 		onclick={submitOrder}
 	>
 		{#if !walletStore.isConnected}
@@ -703,7 +704,7 @@
 </div>
 
 <!-- Confirm Order Modal -->
-{#if showConfirm && pendingOrder}
+{#if showConfirm && pendingOrder && sameOrderContext(pendingOrder, currentContext())}
 	<!-- Backdrop -->
 	<button
 		type="button"
@@ -843,7 +844,7 @@
 						>
 					</div>
 				{/if}
-				{#if !isSpot && reduceOnly}
+				{#if !pendingOrder.isSpot && pendingOrder.reduceOnly}
 					<div class="flex justify-between items-center">
 						<span class="text-gray-400">Reduce Only</span>
 						<span class="font-semibold text-white">Yes</span>
@@ -880,6 +881,7 @@
 			</div>
 
 			<!-- Footer -->
+			{#if confirmIssue}<p role="alert" class="px-5 pb-2 text-xs text-amber-700">{confirmIssue}</p>{/if}
 			<div class="flex gap-3 px-5 py-4 border-t border-border-primary">
 				<button
 					type="button"
@@ -892,7 +894,7 @@
 						{pendingOrder.side === 'buy'
 						? 'bg-long hover:bg-long/90'
 						: 'bg-short hover:bg-short/90'}"
-					disabled={submitting}
+					disabled={submitting || !!confirmIssue}
 					onclick={executeOrder}
 				>
 					{submitting ? "Submitting…" : "Confirm →"}

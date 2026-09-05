@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { marketStore } from '$stores/market.svelte';
 	import { accountStore } from '$stores/account.svelte';
 	import { walletStore } from '$stores/wallet.svelte';
@@ -16,7 +16,7 @@
 
 	const leverageByCoin = $derived.by(() => {
 		const map = new Map<string, number>();
-		for (const p of accountStore.positions) {
+		for (const p of accountStore.forAddress(walletStore.address).positions) {
 			if (p?.coin && p?.leverage?.value != null) {
 				map.set(p.coin, p.leverage.value);
 			}
@@ -32,7 +32,7 @@
 		const addr = walletStore.address;
 		if (!addr || addr === leverageLoadedFor) return;
 		leverageLoadedFor = addr;
-		void accountStore.fetchAccountState(addr);
+		untrack(() => { void accountStore.fetchAccountState(addr); });
 	});
 </script>
 
