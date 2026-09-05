@@ -98,14 +98,10 @@
 				await unsubscribe(`activeAssetCtx:${activeCoin}`);
 			}
 
-			// For HIP-3 assets (e.g. "xyz:XYZ100"), load dex data before selecting coin.
-			const dexFromCoin = nextCoin.includes(':') ? nextCoin.split(':')[0] : '';
-			if (
-				!marketStore.findPerpAsset(nextCoin) &&
-				dexFromCoin &&
-				marketStore.hip3Dexes.some((d) => d.name === dexFromCoin)
-			) {
-				await marketStore.selectHip3Dex(dexFromCoin);
+			// Resolve direct HIP-3 links (including archived positions/history)
+			// without changing the market overview's selected DEX.
+			if (nextCoin.includes(':') && !marketStore.findPerpAsset(nextCoin)) {
+				await marketStore.prefetchHip3Meta([nextCoin]);
 			}
 
 			await marketStore.selectCoin(nextCoin);

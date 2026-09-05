@@ -1,4 +1,5 @@
 import { infoClient } from '$api/client';
+import { VISIBLE_HIP3_DEX_NAMES } from '$utils/constants';
 import {
 	subscribeL2Book,
 	subscribeTrades,
@@ -128,17 +129,14 @@ let spotTokens = $state<SpotToken[]>([]);
 let spotPairs = $state<SpotPair[]>([]);
 let spotCtxs = $state<SpotCtx[]>([]);
 
-// HIP-3 state
-let hip3Dexes = $state<PerpDex[]>([]);
+// Keep the complete registry for historical asset lookups; only the curated
+// subset is exposed to the market overview (including its "All" tab).
+let allHip3Dexes = $state<PerpDex[]>([]);
+const hip3Dexes = $derived(
+	VISIBLE_HIP3_DEX_NAMES.flatMap((name) => allHip3Dexes.filter((d) => d.name === name))
+);
 let activeHip3Dex = $state('__all__');
-let activeHip3DexIndex = $state(0);
-let hip3Metas = $state<AssetMeta[]>([]);
-let hip3Ctxs = $state<AssetCtx[]>([]);
-let hip3CollateralToken = $state(0);
-let hip3Loading = $state(false);
-// Pre-merged assets from all HIP-3 DEXes
-let hip3AllAssets = $state<PerpAsset[]>([]);
-let hip3AllInFlight: Promise<void> | null = null;
+let hip3DexLoading = $state<Record<string, boolean>>({});
 const hip3DexInFlight = new Map<string, Promise<void>>();
 
 // All mids (shared across pages)
@@ -155,7 +153,6 @@ let recentTrades = $state<Trade[]>([]);
 let perpMetaFetchedAt = $state(0);
 let spotMetaFetchedAt = $state(0);
 let perpDexsFetchedAt = $state(0);
-let hip3AllFetchedAt = $state(0);
 let hip3DexCache = $state<Record<string, {
 	metas: AssetMeta[];
 	ctxs: AssetCtx[];
@@ -216,19 +213,30 @@ const spotAssets = $derived<SpotAsset[]>(
 	}).sort(byVolume)
 );
 
-// HIP-3 assets for the active dex
-const hip3Quote = $derived(getQuoteCurrency(hip3CollateralToken));
-
-const hip3Assets = $derived<PerpAsset[]>(
-	hip3Metas
+// Read metadata and the original DEX index together. Background prefetches must
+// never pair another DEX's metadata with the currently selected DEX's asset IDs.
+function getHip3Assets(dex: PerpDex | undefined): PerpAsset[] {
+	if (!dex) return [];
+	const cached = hip3DexCache[dex.name];
+	if (!cached) return [];
+	return cached.metas
 		.map((meta, i) => ({
 			meta,
-			ctx: hip3Ctxs[i] ?? {} as AssetCtx,
-			assetId: 100000 + activeHip3DexIndex * 10000 + i,
-			quoteCurrency: hip3Quote
+			ctx: cached.ctxs[i] ?? {} as AssetCtx,
+			assetId: 100000 + dex.perpDexIndex * 10000 + i,
+			quoteCurrency: getQuoteCurrency(cached.collateralToken)
 		}))
 		.filter((a) => !a.meta.isDelisted)
-		.sort(byVolume)
+		.sort(byVolume);
+}
+
+const hip3Quote = $derived(getQuoteCurrency(hip3DexCache[activeHip3Dex]?.collateralToken ?? 0));
+const hip3Assets = $derived(getHip3Assets(hip3Dexes.find((d) => d.name === activeHip3Dex)));
+const hip3AllAssets = $derived(hip3Dexes.flatMap(getHip3Assets).sort(byVolume));
+const hip3Loading = $derived(
+	activeHip3Dex === '__all__'
+		? hip3Dexes.some((d) => hip3DexLoading[d.name])
+		: !!hip3DexLoading[activeHip3Dex]
 );
 
 // Filtered + sorted results
@@ -283,14 +291,17 @@ async function fetchSpotMeta(force = false) {
 
 // Fetch all HIP-3 perpDexes (preserve original index for asset ID calculation)
 async function fetchPerpDexs(force = false) {
-	if (!force && hip3Dexes.length > 0 && isFresh(perpDexsFetchedAt)) return;
+	if (!force && isFresh(perpDexsFetchedAt)) return;
 	const result = await infoClient.perpDexs();
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const raw = result as any[];
-	hip3Dexes = raw
+	allHip3Dexes = raw
 		.map((d, i) => d !== null ? { ...d, perpDexIndex: i } as PerpDex : null)
 		.filter((d): d is PerpDex => d !== null);
 	perpDexsFetchedAt = Date.now();
+	if (activeHip3Dex !== '__all__' && !hip3Dexes.some((d) => d.name === activeHip3Dex)) {
+		activeHip3Dex = '__all__';
+	}
 	// If user is already on HIP-3 while dexes are loading, warm data automatically.
 	if (activeTab === 'hip3') {
 		void (activeHip3Dex === '__all__' ? fetchAllHip3(force) : fetchHip3Meta(activeHip3Dex, force));
@@ -299,19 +310,12 @@ async function fetchPerpDexs(force = false) {
 
 // Fetch meta + ctxs for a specific HIP-3 DEX
 async function fetchHip3Meta(dex: string, force = false) {
+	const inFlight = hip3DexInFlight.get(dex);
+	if (inFlight) return inFlight;
 	const cached = hip3DexCache[dex];
-	if (!force && cached && isFresh(cached.fetchedAt)) {
-		hip3Metas = cached.metas;
-		hip3Ctxs = cached.ctxs;
-		hip3CollateralToken = cached.collateralToken;
-		return;
-	}
-	if (!force) {
-		const inFlight = hip3DexInFlight.get(dex);
-		if (inFlight) return inFlight;
-	}
+	if (!force && cached && isFresh(cached.fetchedAt)) return;
 	const task = (async () => {
-		hip3Loading = true;
+		hip3DexLoading[dex] = true;
 		try {
 			const result = await infoClient.metaAndAssetCtxs({ dex });
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -319,9 +323,6 @@ async function fetchHip3Meta(dex: string, force = false) {
 			const metas = meta?.universe ?? [];
 			const contexts = ctxs ?? [];
 			const collateralToken = meta?.collateralToken ?? 0;
-			hip3Metas = metas;
-			hip3Ctxs = contexts;
-			hip3CollateralToken = collateralToken;
 			hip3DexCache = {
 				...hip3DexCache,
 				[dex]: {
@@ -332,7 +333,7 @@ async function fetchHip3Meta(dex: string, force = false) {
 				}
 			};
 		} finally {
-			hip3Loading = false;
+			hip3DexLoading[dex] = false;
 			hip3DexInFlight.delete(dex);
 		}
 	})();
@@ -340,54 +341,20 @@ async function fetchHip3Meta(dex: string, force = false) {
 	return task;
 }
 
-// Fetch all HIP-3 DEXes in parallel and merge into a single list
+// "All" fetches only visible DEXes and shares their per-DEX caches with detail
+// pages, so looking up an archived coin cannot add it back to the market list.
 async function fetchAllHip3(force = false) {
-	if (!force && hip3AllAssets.length > 0 && isFresh(hip3AllFetchedAt)) return;
-	if (!force && hip3AllInFlight) return hip3AllInFlight;
-	const task = (async () => {
-		hip3Loading = true;
-		try {
-			const results = await Promise.all(
-				hip3Dexes.map((dex) => infoClient.metaAndAssetCtxs({ dex: dex.name }))
-			);
-			const merged: PerpAsset[] = [];
-			results.forEach((result, idx) => {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const [meta, ctxs] = result as any;
-				const metas: AssetMeta[] = meta?.universe ?? [];
-				const contexts: AssetCtx[] = ctxs ?? [];
-				const dexIndex = hip3Dexes[idx].perpDexIndex;
-				const quoteCurrency = getQuoteCurrency(meta?.collateralToken ?? 0);
-				metas.forEach((m, i) => {
-					if (!m.isDelisted) {
-						merged.push({
-							meta: m,
-							ctx: contexts[i] ?? {} as AssetCtx,
-							assetId: 100000 + dexIndex * 10000 + i,
-							quoteCurrency
-						});
-					}
-				});
-			});
-			hip3AllAssets = merged.sort(byVolume);
-			hip3AllFetchedAt = Date.now();
-		} finally {
-			hip3Loading = false;
-			hip3AllInFlight = null;
-		}
-	})();
-	hip3AllInFlight = task;
-	return task;
+	await Promise.all(hip3Dexes.map((dex) => fetchHip3Meta(dex.name, force)));
 }
 
-// Select a HIP-3 DEX sub-tab (or "__all__" for all DEXes)
+// Select a visible HIP-3 DEX sub-tab (or "__all__" for the curated list).
 async function selectHip3Dex(dex: string, force = false) {
+	if (!isFresh(perpDexsFetchedAt)) await fetchPerpDexs();
+	if (dex !== '__all__' && !hip3Dexes.some((d) => d.name === dex)) return;
 	activeHip3Dex = dex;
 	if (dex === '__all__') {
 		await fetchAllHip3(force);
 	} else {
-		const dexInfo = hip3Dexes.find((d) => d.name === dex);
-		activeHip3DexIndex = dexInfo?.perpDexIndex ?? 0;
 		await fetchHip3Meta(dex, force);
 	}
 }
@@ -451,9 +418,7 @@ function setTab(tab: 'perp' | 'spot' | 'hip3') {
 			void fetchPerpDexs();
 			return;
 		}
-		if (activeHip3Dex === '__all__' && (hip3AllAssets.length === 0 || !isFresh(hip3AllFetchedAt))) {
-			void selectHip3Dex('__all__');
-		}
+		void selectHip3Dex(activeHip3Dex);
 	}
 }
 
@@ -474,7 +439,6 @@ function resetAll() {
 	perpMetaFetchedAt = 0;
 	spotMetaFetchedAt = 0;
 	perpDexsFetchedAt = 0;
-	hip3AllFetchedAt = 0;
 	hip3DexCache = {};
 }
 
@@ -486,7 +450,7 @@ function findHip3CachedAsset(coin: string): PerpAsset | undefined {
 	if (!coin.includes(':')) return undefined;
 	const dexName = coin.split(':')[0];
 	const cached = hip3DexCache[dexName];
-	const dexInfo = hip3Dexes.find((d) => d.name === dexName);
+	const dexInfo = allHip3Dexes.find((d) => d.name === dexName);
 	if (!cached || !dexInfo) return undefined;
 	const idx = cached.metas.findIndex((m) => m.name === coin);
 	if (idx < 0) return undefined;
@@ -500,8 +464,6 @@ function findHip3CachedAsset(coin: string): PerpAsset | undefined {
 
 function findPerpAsset(coin: string): PerpAsset | undefined {
 	return perpAssets.find((a) => a.meta.name === coin) ??
-		hip3Assets.find((a) => a.meta.name === coin) ??
-		hip3AllAssets.find((a) => a.meta.name === coin) ??
 		findHip3CachedAsset(coin);
 }
 
@@ -514,7 +476,7 @@ async function prefetchHip3Meta(coins: string[]) {
 	await fetchPerpDexs();
 	await Promise.all(
 		dexNames
-			.filter((name) => hip3Dexes.some((d) => d.name === name))
+			.filter((name) => allHip3Dexes.some((d) => d.name === name))
 			.map((name) => fetchHip3Meta(name))
 	);
 }
